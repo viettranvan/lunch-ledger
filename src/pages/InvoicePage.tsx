@@ -1,25 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../convex/_generated/api";
-import type { Id, Doc } from "../convex/_generated/dataModel";
-import "./App.css";
+import type { Id, Doc } from "../../convex/_generated/dataModel";
+import { api } from "../../convex/_generated/api";
 
-// Helper for parsing simple math expressions like "14+10"
-function parseAndCalculatePrice(expression: string): number {
-  if (!expression) return 0;
-  const sanitized = expression.replace(/[^0-9+\-*/.]/g, "");
-  if (!sanitized) return 0;
-
-  try {
-    const result = new Function(`return ${sanitized}`)();
-    return Number.isNaN(result) ? 0 : Number(result) * 1000;
-  } catch {
-    return 0;
-  }
-}
-
-function App() {
+export default function InvoicePage() {
   const users = useQuery(api.users.getAll);
   const invoices = useQuery(api.invoices.getAll);
 
@@ -28,7 +13,6 @@ function App() {
   );
 
   const createInvoice = useMutation(api.invoices.create);
-  const createUser = useMutation(api.users.create);
 
   // Invoice form state
   const [newStoreName, setNewStoreName] = useState("");
@@ -36,9 +20,6 @@ function App() {
   const [newInvoiceDate, setNewInvoiceDate] = useState(() =>
     new Date().toLocaleDateString("en-CA"),
   );
-
-  // User form state
-  const [newUserName, setNewUserName] = useState("");
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,17 +36,6 @@ function App() {
     setNewInvoiceDate(new Date().toLocaleDateString("en-CA"));
   };
 
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newUserName) return;
-
-    await createUser({
-      name: newUserName,
-    });
-
-    setNewUserName("");
-  };
-
   if (users === undefined || invoices === undefined) {
     return <div className="loader">Đang tải dữ liệu...</div>;
   }
@@ -74,7 +44,7 @@ function App() {
   if (activeInvoiceId) {
     const activeInvoice = invoices.find((inv) => inv._id === activeInvoiceId);
     return (
-      <div className="app-container">
+      <div className="invoice-container">
         <div className="header">
           <button className="back-btn" onClick={() => setActiveInvoiceId(null)}>
             ← Quay lại
@@ -91,264 +61,52 @@ function App() {
   }
 
   return (
-    <div className="app-container">
-      <div className="header">
-        <h1>Lunch Ledger 🍔</h1>
-      </div>
+    <div className="dashboard-grid full-width">
+      <div className="panel full-width">
+        <h2>Hóa đơn gần đây</h2>
+        <form className="inline-form" onSubmit={handleCreateInvoice}>
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Tên quán (vd: Cơm sườn)"
+            value={newStoreName}
+            onChange={(e) => setNewStoreName(e.target.value)}
+            required
+          />
+          <input
+            type="number"
+            className="input-field"
+            placeholder="Tổng tiền (đ)"
+            value={newInvoiceAmount}
+            onChange={(e) => setNewInvoiceAmount(e.target.value)}
+            required
+          />
+          <input
+            type="date"
+            className="input-field"
+            value={newInvoiceDate}
+            onChange={(e) => setNewInvoiceDate(e.target.value)}
+            required
+          />
+          <button type="submit" className="submit-btn small-btn">
+            Thêm
+          </button>
+        </form>
 
-      <div className="dashboard-grid">
-        {/* Full-width Debt Overview */}
-        <div
-          className="panel"
-          style={{ gridColumn: "1 / -1", marginBottom: "1rem" }}
-        >
-          <DebtOverview />
-        </div>
-
-        {/* Right column / Invoices list */}
-        <div className="panel">
-          <h2>Hóa đơn gần đây</h2>
-          <form className="inline-form" onSubmit={handleCreateInvoice}>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="Tên quán (vd: Cơm sườn)"
-              value={newStoreName}
-              onChange={(e) => setNewStoreName(e.target.value)}
-              required
-            />
-            <input
-              type="number"
-              className="input-field"
-              placeholder="Tổng tiền (đ)"
-              value={newInvoiceAmount}
-              onChange={(e) => setNewInvoiceAmount(e.target.value)}
-              required
-            />
-            <input
-              type="date"
-              className="input-field"
-              value={newInvoiceDate}
-              onChange={(e) => setNewInvoiceDate(e.target.value)}
-              required
-            />
-            <button type="submit" className="submit-btn small-btn">
-              Thêm
-            </button>
-          </form>
-
-          {invoices.length === 0 ? (
-            <div className="empty-state">Chưa có hóa đơn nào</div>
-          ) : (
-            <ul className="list-view">
-              {invoices.map((invoice) => (
-                <ExpandableInvoiceItem
-                  key={invoice._id}
-                  invoice={invoice}
-                  onClick={() => setActiveInvoiceId(invoice._id)}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Left column / Users */}
-        <div className="panel">
-          <h2>Thành viên</h2>
-          <form className="inline-form" onSubmit={handleCreateUser}>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="Tên thành viên mới"
-              value={newUserName}
-              onChange={(e) => setNewUserName(e.target.value)}
-              required
-            />
-            <button type="submit" className="submit-btn small-btn">
-              Thêm
-            </button>
-          </form>
-
-          {users.length === 0 ? (
-            <div className="empty-state">Chưa có thành viên nào</div>
-          ) : (
-            <div className="user-chips">
-              {users.map((user) => (
-                <div key={user._id} className="user-chip">
-                  👤 {user.name}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DebtOverview() {
-  const debts = useQuery(api.users.getDebtOverview);
-  const markAllPaidForUser = useMutation(api.orderers.markAllPaidForUser);
-
-  const [confirmPay, setConfirmPay] = useState<{
-    isOpen: boolean;
-    userId: Id<"users">;
-    name: string;
-  }>({ isOpen: false, userId: "" as Id<"users">, name: "" });
-
-  if (debts === undefined) {
-    return <div className="loader">Đang tải nợ...</div>;
-  }
-
-  return (
-    <div style={{ width: "100%" }}>
-      <h2>Tổng Nợ</h2>
-      {debts.length === 0 ? (
-        <div className="empty-state" style={{ padding: "2rem" }}>
-          Tuyệt vời! Không ai còn nợ tiền ăn. 🎉
-        </div>
-      ) : (
-        <div className="invoice-details-table-container">
-          <table className="invoice-details-table">
-            <thead>
-              <tr>
-                <th
-                  style={{
-                    textAlign: "left",
-                    paddingLeft: "1.5rem",
-                    width: "25%",
-                  }}
-                >
-                  Thành viên
-                </th>
-                <th style={{ textAlign: "center", width: "40%" }}>
-                  Chi tiết nợ
-                </th>
-                <th
-                  style={{
-                    textAlign: "right",
-                    width: "20%",
-                  }}
-                >
-                  Tổng nợ
-                </th>
-                <th
-                  style={{
-                    textAlign: "center",
-                    paddingRight: "1.5rem",
-                    width: "15%",
-                  }}
-                >
-                  Hành động
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {debts.map((userDebt) => (
-                <tr key={userDebt.user_id}>
-                  <td style={{ textAlign: "left", paddingLeft: "1.5rem" }}>
-                    <strong
-                      style={{ color: "var(--text-main)", fontSize: "1.05rem" }}
-                    >
-                      {userDebt.name}
-                    </strong>
-                  </td>
-                  <td
-                    style={{
-                      textAlign: "center",
-                      fontStyle: "italic",
-                      opacity: 0.8,
-                    }}
-                  >
-                    {userDebt.details
-                      .map((val) => (val / 1000).toLocaleString("vi-VN"))
-                      .join(" + ")}
-                  </td>
-                  <td
-                    style={{
-                      textAlign: "right",
-                      color: "#f472b6",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {userDebt.totalDebt.toLocaleString("vi-VN")}đ
-                  </td>
-                  <td style={{ textAlign: "center", paddingRight: "1.5rem" }}>
-                    <button
-                      onClick={() => {
-                        setConfirmPay({
-                          isOpen: true,
-                          userId: userDebt.user_id as Id<"users">,
-                          name: userDebt.name,
-                        });
-                      }}
-                      style={{
-                        background: "var(--accent)",
-                        color: "white",
-                        border: "none",
-                        padding: "6px 12px",
-                        borderRadius: "6px",
-                        cursor: "pointer",
-                        fontSize: "0.85rem",
-                        fontWeight: "500",
-                        transition: "background 0.2s",
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background =
-                          "var(--accent-hover)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "var(--accent)")
-                      }
-                    >
-                      Đã thanh toán
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {confirmPay.isOpen &&
-        createPortal(
-          <div
-            className="custom-modal-overlay"
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirmPay((prev) => ({ ...prev, isOpen: false }));
-            }}
-          >
-            <div className="custom-modal" onClick={(e) => e.stopPropagation()}>
-              <h3>Xác nhận thanh toán</h3>
-              <p>Xác nhận {confirmPay.name} đã thanh toán toàn bộ nợ?</p>
-              <div className="custom-modal-actions">
-                <button
-                  className="cancel-btn"
-                  onClick={() =>
-                    setConfirmPay((prev) => ({ ...prev, isOpen: false }))
-                  }
-                >
-                  Hủy
-                </button>
-                <button
-                  className="confirm-btn"
-                  onClick={async () => {
-                    await markAllPaidForUser({
-                      user_id: confirmPay.userId,
-                    });
-                    setConfirmPay((prev) => ({ ...prev, isOpen: false }));
-                  }}
-                  style={{ background: "var(--accent)" }}
-                >
-                  Xác nhận
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
+        {invoices.length === 0 ? (
+          <div className="empty-state">Chưa có hóa đơn nào</div>
+        ) : (
+          <ul className="list-view">
+            {invoices.map((invoice) => (
+              <ExpandableInvoiceItem
+                key={invoice._id}
+                invoice={invoice}
+                onClick={() => setActiveInvoiceId(invoice._id)}
+              />
+            ))}
+          </ul>
         )}
+      </div>
     </div>
   );
 }
@@ -422,7 +180,14 @@ function ExpandableInvoiceItem({
           >
             {expanded ? "▼" : "▶"}
           </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              whiteSpace: "nowrap",
+            }}
+          >
             <strong
               style={{
                 fontSize: expanded ? "1.1rem" : "1.05rem",
@@ -446,7 +211,12 @@ function ExpandableInvoiceItem({
                 Hoàn tất
               </span>
             )}
-            <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+            <span
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "0.85rem",
+              }}
+            >
               (
               {invoice.date
                 ? invoice.date.split("-").reverse().join("/")
@@ -668,13 +438,12 @@ function ExpandableInvoiceItem({
                           <button
                             className="delete-btn"
                             onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Bạn có chắc muốn xóa phần ăn của ${order.user_name} không?`,
-                                )
-                              ) {
-                                deleteOrder({ id: order._id });
-                              }
+                              setConfirmDelete({
+                                isOpen: true,
+                                type: "order",
+                                id: order._id,
+                                name: order.user_name,
+                              });
                             }}
                             title="Xóa phần ăn"
                             style={{ color: "#ef4444", padding: "4px" }}
@@ -702,12 +471,13 @@ function ExpandableInvoiceItem({
                           <button
                             className="delete-btn"
                             onClick={() => {
-                              setConfirmDelete({
-                                isOpen: true,
-                                type: "order",
-                                id: order._id,
-                                name: order.user_name,
-                              });
+                              if (
+                                window.confirm(
+                                  `Bạn có chắc muốn xóa phần ăn của ${order.user_name} không?`,
+                                )
+                              ) {
+                                deleteOrder({ id: order._id });
+                              }
                             }}
                             title="Xóa phần ăn"
                             style={{ color: "#ef4444", padding: "4px" }}
@@ -787,7 +557,6 @@ function ActiveInvoiceView({
     invoice_id: invoiceId,
   });
   const createOrder = useMutation(api.orderers.create);
-  const updateOrder = useMutation(api.orderers.update);
   const togglePaid = useMutation(api.orderers.togglePaid);
   const deleteOrder = useMutation(api.orderers.deleteOrder);
 
@@ -797,176 +566,65 @@ function ActiveInvoiceView({
     name: string;
   }>({ isOpen: false, id: "" as Id<"orderers">, name: "" });
 
-  const [selectedUsers, setSelectedUsers] = useState<
-    { userId: Id<"users">; price: string }[]
-  >([]);
-
-  const [isAdding, setIsAdding] = useState(true);
-
-  // Restore the correct view state when entering an invoice
-  useEffect(() => {
-    if (orderers !== undefined) {
-      if (orderers.length > 0) {
-        // If the invoice already has orders, hide the editing form by default
-        setIsAdding(false);
-        setSelectedUsers([]);
-      } else {
-        // If it's a completely new invoice with no orders, show the form
-        setIsAdding(true);
-        setSelectedUsers([]);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderers === undefined, invoiceId]);
-
-  const toggleUserSelection = (userId: Id<"users">) => {
-    setSelectedUsers((prev) => {
-      const exists = prev.find((u) => u.userId === userId);
-      if (exists) {
-        return prev.filter((u) => u.userId !== userId);
-      } else {
-        return [...prev, { userId, price: "" }];
-      }
-    });
-  };
-
-  const updateUserPrice = (userId: Id<"users">, price: string) => {
-    // Only allow numbers, basic math operators, and decimals
-    const sanitizedInput = price.replace(/[^0-9+\-*/.]/g, "");
-    setSelectedUsers((prev) =>
-      prev.map((u) =>
-        u.userId === userId ? { ...u, price: sanitizedInput } : u,
-      ),
-    );
-  };
+  const [selectedUser, setSelectedUser] = useState<string>("");
+  const [itemPrice, setItemPrice] = useState("");
 
   const handleAddOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedUser || !itemPrice) return;
 
-    // Check if at least one user is selected and all selected users have a valid price
-    if (selectedUsers.length === 0) return;
-
-    // Parse all prices
-    const parsedUsers = selectedUsers.map((u) => ({
-      userId: u.userId,
-      parsedPrice: parseAndCalculatePrice(u.price),
-    }));
-
-    const hasInvalidPrice = parsedUsers.some((u) => u.parsedPrice <= 0);
-
-    if (hasInvalidPrice) {
-      alert(
-        "Vui lòng nhập giá lớn hơn 0 (hoặc phép tính hợp lệ) cho tất cả thành viên đã chọn.",
-      );
-      return;
-    }
-
-    // Create or update an order for each selected user
-    const orderPromises = parsedUsers.map((u) => {
-      // Find if this user already has an order for this invoice
-      const existingOrder = orderers
-        ? orderers.find((o) => o.user_id === u.userId)
-        : undefined;
-
-      if (existingOrder) {
-        // Update existing order
-        return updateOrder({
-          id: existingOrder._id,
-          item_price: u.parsedPrice,
-        });
-      } else {
-        // Create new order
-        return createOrder({
-          invoice_id: invoiceId,
-          user_id: u.userId,
-          item_price: u.parsedPrice,
-        });
-      }
+    await createOrder({
+      invoice_id: invoiceId,
+      user_id: selectedUser as Id<"users">,
+      item_price: Number(itemPrice),
     });
 
-    // Delete any existing orders that are no longer selected
-    const selectedUserIds = parsedUsers.map((u) => u.userId);
-    const toDelete = orderers
-      ? orderers.filter((o) => !selectedUserIds.includes(o.user_id))
-      : [];
-
-    toDelete.forEach((o) => {
-      orderPromises.push(deleteOrder({ id: o._id }));
-    });
-
-    await Promise.all(orderPromises);
-
-    setSelectedUsers([]);
-    setIsAdding(false);
+    setSelectedUser("");
+    setItemPrice("");
   };
 
   if (orderers === undefined)
     return <div className="loader">Đang tải chi tiết...</div>;
 
   const totalOrdered = orderers.reduce(
-    (sum, order) => sum + order.item_price,
+    (sum, order) => sum + order.actual_price,
     0,
   );
 
   const hasPaidUser = orderers.some((o) => o.is_paid);
 
-  const liveTotalNewOrder = selectedUsers.reduce((sum, u) => {
-    return sum + parseAndCalculatePrice(u.price);
-  }, 0);
-
   return (
     <div className="invoice-details">
-      <div
-        className="summary-box"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <div>
-          <strong>
-            {isAdding ? "Tổng hóa đơn sẽ là: " : "Tổng tiền đã đặt: "}
-          </strong>{" "}
-          <span
-            style={{
-              fontSize: "1.4rem",
-              color: isAdding && liveTotalNewOrder > 0 ? "#f472b6" : "inherit",
-              transition: "color 0.3s ease",
-            }}
-          >
-            {isAdding
-              ? liveTotalNewOrder.toLocaleString("vi-VN")
-              : totalOrdered.toLocaleString("vi-VN")}
-            đ
-          </span>
-        </div>
-
-        {!isAdding && !hasPaidUser && (
-          <button
-            className="submit-btn small-btn"
-            onClick={() => {
-              if (orderers) {
-                const existingSelected = orderers.map((o) => ({
-                  userId: o.user_id,
-                  price: (o.item_price / 1000).toString(),
-                }));
-                setSelectedUsers(existingSelected);
-              }
-              setIsAdding(true);
-            }}
-            style={{
-              padding: "8px 16px",
-              fontSize: "1rem",
-              background: "linear-gradient(135deg, #10b981 0%, #3b82f6 100%)",
-            }}
-          >
-            ✏️ Thêm / Cập nhật
-          </button>
-        )}
-      </div>
-
-      {hasPaidUser && (
+      {!hasPaidUser ? (
+        <form className="order-form" onSubmit={handleAddOrder}>
+          <div className="form-row">
+            <select
+              className="input-field"
+              value={selectedUser}
+              onChange={(e) => setSelectedUser(e.target.value)}
+              required
+            >
+              <option value="">-- Chọn thành viên --</option>
+              {users.map((user) => (
+                <option key={user._id} value={user._id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              className="input-field"
+              placeholder="Giá món (vd: 35000)"
+              value={itemPrice}
+              onChange={(e) => setItemPrice(e.target.value)}
+              required
+            />
+            <button type="submit" className="submit-btn">
+              ✨ Thêm phần ăn
+            </button>
+          </div>
+        </form>
+      ) : (
         <div
           style={{
             padding: "10px",
@@ -984,88 +642,10 @@ function ActiveInvoiceView({
         </div>
       )}
 
-      {isAdding && !hasPaidUser && (
-        <form className="order-form" onSubmit={handleAddOrder}>
-          <div className="form-row">
-            <div className="form-column">
-              <div className="users-checkbox-grid">
-                {users.map((user) => {
-                  const selectedData = selectedUsers.find(
-                    (u) => u.userId === user._id,
-                  );
-                  const isSelected = !!selectedData;
-
-                  return (
-                    <div
-                      key={user._id}
-                      className={`user-select-row ${isSelected ? "selected" : ""}`}
-                    >
-                      <label className="checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleUserSelection(user._id)}
-                        />
-                        {user.name}
-                      </label>
-
-                      {isSelected && (
-                        <input
-                          type="text"
-                          className="price-input-small"
-                          placeholder="Giá (vd: 35, 15+20)"
-                          value={selectedData.price}
-                          onChange={(e) =>
-                            updateUserPrice(user._id, e.target.value)
-                          }
-                          required
-                          autoFocus
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: "12px",
-                  marginTop: "12px",
-                  width: "100%",
-                  alignItems: "center",
-                }}
-              >
-                <button
-                  type="submit"
-                  className="submit-btn"
-                  disabled={selectedUsers.length === 0}
-                  style={{ flex: 1 }}
-                >
-                  ✨ Gửi phần ăn ({selectedUsers.length} người)
-                </button>
-                {liveTotalNewOrder > 0 && (
-                  <button
-                    type="button"
-                    className="submit-btn"
-                    onClick={() => setIsAdding(false)}
-                    style={{
-                      background: "transparent",
-                      color: "var(--text-muted)",
-                      border: "1px solid var(--glass-border)",
-                      padding: "12px",
-                      flex: "0 0 auto",
-                      boxShadow: "none",
-                    }}
-                  >
-                    Hủy
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </form>
-      )}
+      <div className="summary-box">
+        <strong>Tổng tiền đã đặt: </strong>{" "}
+        {totalOrdered.toLocaleString("vi-VN")}đ
+      </div>
 
       <ul className="orders-list">
         {orderers.length === 0 ? (
@@ -1155,5 +735,3 @@ function ActiveInvoiceView({
     </div>
   );
 }
-
-export default App;

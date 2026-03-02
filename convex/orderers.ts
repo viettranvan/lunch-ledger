@@ -1,38 +1,56 @@
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+
+// Helper: recalculate actual_price & percentage for ALL orders in an invoice
+async function recalcAllOrdersForInvoice(
+  ctx: MutationCtx,
+  invoiceId: Id<"invoices">,
+) {
+  const invoice = await ctx.db.get(invoiceId);
+  const invoiceTotal = invoice ? invoice.paid_amount : 0;
+
+  const allOrders = await ctx.db
+    .query("orderers")
+    .filter((q) => q.eq(q.field("invoice_id"), invoiceId))
+    .collect();
+
+  const totalItemsPrice = allOrders.reduce((sum, o) => sum + o.item_price, 0);
+
+  for (const order of allOrders) {
+    let percentage = 0;
+    let actualPrice = order.item_price;
+
+    if (totalItemsPrice > 0) {
+      percentage = order.item_price / totalItemsPrice;
+      actualPrice = Math.round(percentage * invoiceTotal);
+    }
+
+    await ctx.db.patch(order._id, {
+      actual_price: actualPrice,
+      percentage: percentage * 100,
+      updated_at: Date.now(),
+    });
+  }
+}
 
 export const getByInvoice = query({
   args: { invoice_id: v.id("invoices") },
   handler: async (ctx, args) => {
-    const invoice = await ctx.db.get(args.invoice_id);
-    const invoiceTotal = invoice ? invoice.paid_amount : 0;
-
     const orders = await ctx.db
       .query("orderers")
       .filter((q) => q.eq(q.field("invoice_id"), args.invoice_id))
       .order("desc")
       .collect();
 
-    const totalItemsPrice = orders.reduce((sum, o) => sum + o.item_price, 0);
-
-    // Join with users data
+    // Just join with user names — actual_price & percentage are already stored
     return await Promise.all(
       orders.map(async (order) => {
         const user = await ctx.db.get(order.user_id);
-
-        let computedActualPrice = order.item_price;
-        let percentage = 0;
-
-        if (totalItemsPrice > 0) {
-          percentage = order.item_price / totalItemsPrice;
-          computedActualPrice = Math.round(percentage * invoiceTotal);
-        }
-
         return {
           ...order,
           user_name: user ? user.name : "Unknown User",
-          actual_price: computedActualPrice,
-          percentage: percentage * 100,
         };
       }),
     );
@@ -46,17 +64,20 @@ export const create = mutation({
     item_price: v.number(),
   },
   handler: async (ctx, args) => {
-    // For now, assume actual_price equals item_price.
-    // The actual price and percentage will be calculated properly later when invoice changes.
-    return await ctx.db.insert("orderers", {
+    const id = await ctx.db.insert("orderers", {
       user_id: args.user_id,
       invoice_id: args.invoice_id,
       actual_price: args.item_price,
       item_price: args.item_price,
       is_paid: false,
-      percentage: 100,
+      percentage: 0,
       updated_at: Date.now(),
     });
+
+    // Recalculate all orders in this invoice (including the new one)
+    await recalcAllOrdersForInvoice(ctx, args.invoice_id);
+
+    return id;
   },
 });
 
@@ -76,18 +97,29 @@ export const update = mutation({
     item_price: v.number(),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.patch(args.id, {
-      actual_price: args.item_price,
+    const order = await ctx.db.get(args.id);
+    if (!order) return;
+
+    await ctx.db.patch(args.id, {
       item_price: args.item_price,
       updated_at: Date.now(),
     });
+
+    // Recalculate all orders in this invoice
+    await recalcAllOrdersForInvoice(ctx, order.invoice_id);
   },
 });
 
 export const deleteOrder = mutation({
   args: { id: v.id("orderers") },
   handler: async (ctx, args) => {
-    return await ctx.db.delete(args.id);
+    const order = await ctx.db.get(args.id);
+    if (!order) return;
+
+    await ctx.db.delete(args.id);
+
+    // Recalculate remaining orders in this invoice
+    await recalcAllOrdersForInvoice(ctx, order.invoice_id);
   },
 });
 

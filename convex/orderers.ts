@@ -123,6 +123,39 @@ export const deleteOrder = mutation({
   },
 });
 
+export const createDebtAdjustment = mutation({
+  args: {
+    user_id: v.id("users"),
+    amount: v.number(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const today = new Date();
+    const dateStr = `${today.getDate().toString().padStart(2, "0")}/${(today.getMonth() + 1).toString().padStart(2, "0")}/${today.getFullYear()}`;
+
+    const invoiceId = await ctx.db.insert("invoices", {
+      store_name: `Điều chỉnh nợ - ${args.reason}`,
+      paid_amount: 0,
+      date: dateStr,
+      updated_at: Date.now(),
+    });
+
+    await ctx.db.insert("orderers", {
+      user_id: args.user_id,
+      invoice_id: invoiceId,
+      item_price: -args.amount,
+      actual_price: -args.amount,
+      is_paid: false,
+      percentage: 0,
+      updated_at: Date.now(),
+    });
+
+    await recalcAllOrdersForInvoice(ctx, invoiceId);
+
+    return invoiceId;
+  },
+});
+
 export const markAllPaidForUser = mutation({
   args: { user_id: v.id("users") },
   handler: async (ctx, args) => {

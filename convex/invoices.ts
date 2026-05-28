@@ -50,6 +50,49 @@ export const create = mutation({
   },
 });
 
+export const getWithStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const invoices = await ctx.db.query("invoices").collect();
+
+    const withStatus = await Promise.all(
+      invoices.map(async (invoice) => {
+        const orderers = await ctx.db
+          .query("orderers")
+          .filter((q) => q.eq(q.field("invoice_id"), invoice._id))
+          .collect();
+
+        const totalOrderers = orderers.length;
+        const paidOrderers = orderers.filter((o) => o.is_paid).length;
+
+        let status: "completed" | "empty" | "unpaid" | "partial";
+        if (totalOrderers === 0) {
+          status = "empty";
+        } else if (paidOrderers === totalOrderers) {
+          status = "completed";
+        } else if (paidOrderers === 0) {
+          status = "unpaid";
+        } else {
+          status = "partial";
+        }
+
+        return {
+          ...invoice,
+          total_orderers: totalOrderers,
+          paid_orderers: paidOrderers,
+          status,
+        };
+      }),
+    );
+
+    return withStatus.sort((a, b) => {
+      const timeA = parseDateString(a.date) || a._creationTime;
+      const timeB = parseDateString(b.date) || b._creationTime;
+      return timeB - timeA;
+    });
+  },
+});
+
 export const getById = query({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {

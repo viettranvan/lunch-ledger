@@ -1,121 +1,16 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation } from "convex/react";
-import type { Id, Doc } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
+import type { Id, Doc } from "../../convex/_generated/dataModel";
 
-export default function InvoicePage() {
-  const users = useQuery(api.users.getAll);
-  const invoices = useQuery(api.invoices.getAll);
-
-  const [activeInvoiceId, setActiveInvoiceId] = useState<Id<"invoices"> | null>(
-    null,
-  );
-
-  const createInvoice = useMutation(api.invoices.create);
-
-  // Invoice form state
-  const [newStoreName, setNewStoreName] = useState("");
-  const [newInvoiceAmount, setNewInvoiceAmount] = useState("");
-  const [newInvoiceDate, setNewInvoiceDate] = useState(() =>
-    new Date().toLocaleDateString("en-CA"),
-  );
-
-  const handleCreateInvoice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newStoreName || !newInvoiceAmount || !newInvoiceDate) return;
-
-    await createInvoice({
-      store_name: newStoreName,
-      paid_amount: Number(newInvoiceAmount) * 1000,
-      date: newInvoiceDate,
-    });
-
-    setNewStoreName("");
-    setNewInvoiceAmount("");
-    setNewInvoiceDate(new Date().toLocaleDateString("en-CA"));
-  };
-
-  if (users === undefined || invoices === undefined) {
-    return <div className="loader">Đang tải dữ liệu...</div>;
-  }
-
-  // Active Invoice View
-  if (activeInvoiceId) {
-    const activeInvoice = invoices.find((inv) => inv._id === activeInvoiceId);
-    return (
-      <div className="invoice-container">
-        <div className="header">
-          <button className="back-btn" onClick={() => setActiveInvoiceId(null)}>
-            ← Quay lại
-          </button>
-          <h1>{activeInvoice?.store_name} 🍔</h1>
-          <p>
-            Tổng hóa đơn: {activeInvoice?.paid_amount.toLocaleString("vi-VN")}đ
-          </p>
-        </div>
-
-        <ActiveInvoiceView invoiceId={activeInvoiceId} users={users} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="dashboard-grid full-width">
-      <div className="panel full-width">
-        <h2>Hóa đơn gần đây</h2>
-        <form className="inline-form" onSubmit={handleCreateInvoice}>
-          <input
-            type="text"
-            className="input-field"
-            placeholder="Tên quán (vd: Cơm sườn)"
-            value={newStoreName}
-            onChange={(e) => setNewStoreName(e.target.value)}
-            required
-          />
-          <input
-            type="number"
-            className="input-field"
-            placeholder="Tổng tiền (đ)"
-            value={newInvoiceAmount}
-            onChange={(e) => setNewInvoiceAmount(e.target.value)}
-            required
-          />
-          <input
-            type="date"
-            className="input-field"
-            value={newInvoiceDate}
-            onChange={(e) => setNewInvoiceDate(e.target.value)}
-            required
-          />
-          <button type="submit" className="submit-btn small-btn">
-            Thêm
-          </button>
-        </form>
-
-        {invoices.length === 0 ? (
-          <div className="empty-state">Chưa có hóa đơn nào</div>
-        ) : (
-          <ul className="list-view">
-            {invoices.map((invoice) => (
-              <ExpandableInvoiceItem
-                key={invoice._id}
-                invoice={invoice}
-                onClick={() => setActiveInvoiceId(invoice._id)}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ExpandableInvoiceItem({
+export default function ExpandableInvoiceItem({
   invoice,
+  invoiceStatus,
   onClick,
 }: {
   invoice: Doc<"invoices">;
+  invoiceStatus: "completed" | "empty" | "unpaid" | "partial";
   onClick: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -137,8 +32,22 @@ function ExpandableInvoiceItem({
     return num.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
   };
 
-  const isFullyPaid =
-    orderers && orderers.length > 0 && orderers.every((o) => o.is_paid);
+  const isAdjustment = invoice.store_name.startsWith("Điều chỉnh nợ");
+
+  const statusConfig = {
+    completed: { label: "Hoàn tất", bg: "rgba(16, 185, 129, 0.2)", color: "#6ee7b7", border: "rgba(16, 185, 129, 0.3)" },
+    empty: { label: "Mới tạo", bg: "rgba(107, 114, 128, 0.2)", color: "#9ca3af", border: "rgba(107, 114, 128, 0.3)" },
+    unpaid: { label: "Chưa trả", bg: "rgba(239, 68, 68, 0.2)", color: "#fca5a5", border: "rgba(239, 68, 68, 0.3)" },
+    partial: { label: "Trả một phần", bg: "rgba(245, 158, 11, 0.2)", color: "#fbbf24", border: "rgba(245, 158, 11, 0.3)" },
+  };
+  const statusStyle = statusConfig[invoiceStatus];
+
+  const borderColorMap = {
+    completed: "rgba(16, 185, 129, 0.4)",
+    empty: "rgba(107, 114, 128, 0.3)",
+    unpaid: "rgba(239, 68, 68, 0.4)",
+    partial: "rgba(245, 158, 11, 0.4)",
+  };
 
   return (
     <li
@@ -148,6 +57,8 @@ function ExpandableInvoiceItem({
         alignItems: "stretch",
         cursor: "default",
         padding: expanded ? "1rem" : "0.8rem 1.2rem",
+        borderLeft: `3px solid ${borderColorMap[invoiceStatus]}`,
+        opacity: invoiceStatus === "completed" ? 0.7 : 1,
       }}
     >
       <div
@@ -180,14 +91,7 @@ function ExpandableInvoiceItem({
           >
             {expanded ? "▼" : "▶"}
           </span>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              whiteSpace: "nowrap",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <strong
               style={{
                 fontSize: expanded ? "1.1rem" : "1.05rem",
@@ -196,27 +100,37 @@ function ExpandableInvoiceItem({
             >
               {invoice.store_name}
             </strong>
-            {isFullyPaid && (
+            {!isAdjustment && (
               <span
                 style={{
-                  background: "rgba(16, 185, 129, 0.2)",
-                  color: "#6ee7b7",
+                  background: statusStyle.bg,
+                  color: statusStyle.color,
                   padding: "2px 8px",
                   borderRadius: "12px",
                   fontSize: "0.75rem",
                   fontWeight: "600",
-                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                  border: `1px solid ${statusStyle.border}`,
                 }}
               >
-                Hoàn tất
+                {statusStyle.label}
               </span>
             )}
-            <span
-              style={{
-                color: "var(--text-muted)",
-                fontSize: "0.85rem",
-              }}
-            >
+            {isAdjustment && (
+              <span
+                style={{
+                  background: "rgba(245, 158, 11, 0.2)",
+                  color: "#fbbf24",
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  fontSize: "0.75rem",
+                  fontWeight: "600",
+                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                }}
+              >
+                Điều chỉnh
+              </span>
+            )}
+            <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
               (
               {invoice.date
                 ? invoice.date.split("-").reverse().join("/")
@@ -235,7 +149,7 @@ function ExpandableInvoiceItem({
               padding: "4px 8px",
               borderRadius: "6px",
               transition: "background 0.2s",
-              color: "#f472b6",
+              color: isAdjustment ? "#fbbf24" : "#f472b6",
               fontWeight: "600",
             }}
             onMouseEnter={(e) =>
@@ -245,7 +159,14 @@ function ExpandableInvoiceItem({
               (e.currentTarget.style.background = "transparent")
             }
           >
-            Tổng tiền: {formatNumber(invoice.paid_amount)}đ ✏️
+            {isAdjustment
+              ? `Trừ: ${formatNumber(
+                  Math.abs(
+                    orderers?.reduce((sum, o) => sum + o.item_price, 0) ?? 0,
+                  ),
+                )}đ`
+              : `Tổng tiền: ${formatNumber(invoice.paid_amount)}đ`}{" "}
+            ✏️
           </div>
 
           <button
@@ -438,12 +359,13 @@ function ExpandableInvoiceItem({
                           <button
                             className="delete-btn"
                             onClick={() => {
-                              setConfirmDelete({
-                                isOpen: true,
-                                type: "order",
-                                id: order._id,
-                                name: order.user_name,
-                              });
+                              if (
+                                window.confirm(
+                                  `Bạn có chắc muốn xóa phần ăn của ${order.user_name} không?`,
+                                )
+                              ) {
+                                deleteOrder({ id: order._id });
+                              }
                             }}
                             title="Xóa phần ăn"
                             style={{ color: "#ef4444", padding: "4px" }}
@@ -471,13 +393,12 @@ function ExpandableInvoiceItem({
                           <button
                             className="delete-btn"
                             onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Bạn có chắc muốn xóa phần ăn của ${order.user_name} không?`,
-                                )
-                              ) {
-                                deleteOrder({ id: order._id });
-                              }
+                              setConfirmDelete({
+                                isOpen: true,
+                                type: "order",
+                                id: order._id,
+                                name: order.user_name,
+                              });
                             }}
                             title="Xóa phần ăn"
                             style={{ color: "#ef4444", padding: "4px" }}
@@ -543,195 +464,5 @@ function ExpandableInvoiceItem({
           document.body,
         )}
     </li>
-  );
-}
-
-function ActiveInvoiceView({
-  invoiceId,
-  users,
-}: {
-  invoiceId: Id<"invoices">;
-  users: Doc<"users">[];
-}) {
-  const orderers = useQuery(api.orderers.getByInvoice, {
-    invoice_id: invoiceId,
-  });
-  const createOrder = useMutation(api.orderers.create);
-  const togglePaid = useMutation(api.orderers.togglePaid);
-  const deleteOrder = useMutation(api.orderers.deleteOrder);
-
-  const [confirmDelete, setConfirmDelete] = useState<{
-    isOpen: boolean;
-    id: Id<"orderers">;
-    name: string;
-  }>({ isOpen: false, id: "" as Id<"orderers">, name: "" });
-
-  const [selectedUser, setSelectedUser] = useState<string>("");
-  const [itemPrice, setItemPrice] = useState("");
-
-  const handleAddOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedUser || !itemPrice) return;
-
-    await createOrder({
-      invoice_id: invoiceId,
-      user_id: selectedUser as Id<"users">,
-      item_price: Number(itemPrice),
-    });
-
-    setSelectedUser("");
-    setItemPrice("");
-  };
-
-  if (orderers === undefined)
-    return <div className="loader">Đang tải chi tiết...</div>;
-
-  const totalOrdered = orderers.reduce(
-    (sum, order) => sum + order.actual_price,
-    0,
-  );
-
-  const hasPaidUser = orderers.some((o) => o.is_paid);
-
-  return (
-    <div className="invoice-details">
-      {!hasPaidUser ? (
-        <form className="order-form" onSubmit={handleAddOrder}>
-          <div className="form-row">
-            <select
-              className="input-field"
-              value={selectedUser}
-              onChange={(e) => setSelectedUser(e.target.value)}
-              required
-            >
-              <option value="">-- Chọn thành viên --</option>
-              {users.map((user) => (
-                <option key={user._id} value={user._id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              className="input-field"
-              placeholder="Giá món (vd: 35000)"
-              value={itemPrice}
-              onChange={(e) => setItemPrice(e.target.value)}
-              required
-            />
-            <button type="submit" className="submit-btn">
-              ✨ Thêm phần ăn
-            </button>
-          </div>
-        </form>
-      ) : (
-        <div
-          style={{
-            padding: "10px",
-            backgroundColor: "rgba(245, 158, 11, 0.1)",
-            color: "#f59e0b",
-            border: "1px solid rgba(245, 158, 11, 0.3)",
-            borderRadius: "8px",
-            margin: "16px 0",
-            fontSize: "0.9rem",
-            textAlign: "center",
-          }}
-        >
-          🔒 Hóa đơn đã có người thanh toán (gửi tiền) nên không thể thay đổi
-          phần ăn.
-        </div>
-      )}
-
-      <div className="summary-box">
-        <strong>Tổng tiền đã đặt: </strong>{" "}
-        {totalOrdered.toLocaleString("vi-VN")}đ
-      </div>
-
-      <ul className="orders-list">
-        {orderers.length === 0 ? (
-          <div className="empty-state">Chưa có ai đặt món</div>
-        ) : (
-          orderers.map((order, index) => (
-            <li
-              key={order._id}
-              className={`order-item ${order.is_paid ? "paid" : ""}`}
-              style={{ animationDelay: `${index * 0.05}s` }}
-            >
-              <div className="order-info">
-                <h3>{order.user_name}</h3>
-                <div className="order-price text-muted">
-                  Phần ăn: {order.item_price.toLocaleString("vi-VN")}đ
-                </div>
-              </div>
-
-              <div className="order-actions">
-                <div className="order-price actual-price">
-                  Phải trả: {order.actual_price.toLocaleString("vi-VN")}đ
-                </div>
-                <button
-                  className={`status-btn ${order.is_paid ? "paid-btn" : "unpaid-btn"}`}
-                  onClick={() =>
-                    togglePaid({ id: order._id, is_paid: !order.is_paid })
-                  }
-                >
-                  {order.is_paid ? "✅ Đã gửi" : "❌ Chưa gửi"}
-                </button>
-                {!hasPaidUser && (
-                  <button
-                    className="delete-btn"
-                    onClick={() =>
-                      setConfirmDelete({
-                        isOpen: true,
-                        id: order._id,
-                        name: order.user_name,
-                      })
-                    }
-                  >
-                    🗑️
-                  </button>
-                )}
-              </div>
-            </li>
-          ))
-        )}
-      </ul>
-
-      {confirmDelete.isOpen &&
-        createPortal(
-          <div
-            className="custom-modal-overlay"
-            onClick={() =>
-              setConfirmDelete((prev) => ({ ...prev, isOpen: false }))
-            }
-          >
-            <div className="custom-modal" onClick={(e) => e.stopPropagation()}>
-              <h3>Xác nhận xóa</h3>
-              <p>
-                Bạn có chắc muốn xóa phần ăn của {confirmDelete.name} không?
-              </p>
-              <div className="custom-modal-actions">
-                <button
-                  className="cancel-btn"
-                  onClick={() =>
-                    setConfirmDelete((prev) => ({ ...prev, isOpen: false }))
-                  }
-                >
-                  Hủy
-                </button>
-                <button
-                  className="confirm-btn"
-                  onClick={async () => {
-                    await deleteOrder({ id: confirmDelete.id });
-                    setConfirmDelete((prev) => ({ ...prev, isOpen: false }));
-                  }}
-                >
-                  Xóa
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
-    </div>
   );
 }

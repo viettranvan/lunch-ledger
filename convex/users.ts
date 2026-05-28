@@ -56,12 +56,14 @@ export const getDebtOverview = query({
         user_id: user._id,
         name: user.name,
         totalDebt,
+        absTotal: Math.abs(totalDebt),
+        direction: totalDebt > 0 ? "owed" : "owes_you",
         details,
       };
     });
 
     return overview
-      .filter((userDebt) => userDebt.totalDebt > 0)
+      .filter((userDebt) => userDebt.totalDebt !== 0)
       .sort((a, b) => b.totalDebt - a.totalDebt);
   },
 });

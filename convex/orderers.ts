@@ -2,8 +2,11 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+import {
+  getSortTime,
+  syncInvoiceStatus,
+} from "./lib/invoiceStatus";
 
-// Helper: recalculate actual_price & percentage for ALL orders in an invoice
 async function recalcAllOrdersForInvoice(
   ctx: MutationCtx,
   invoiceId: Id<"invoices">,
@@ -13,7 +16,7 @@ async function recalcAllOrdersForInvoice(
 
   const allOrders = await ctx.db
     .query("orderers")
-    .filter((q) => q.eq(q.field("invoice_id"), invoiceId))
+    .withIndex("by_invoice", (q) => q.eq("invoice_id", invoiceId))
     .collect();
 
   const totalItemsPrice = allOrders.reduce((sum, o) => sum + o.item_price, 0);
@@ -33,6 +36,8 @@ async function recalcAllOrdersForInvoice(
       updated_at: Date.now(),
     });
   }
+
+  await syncInvoiceStatus(ctx, invoiceId);
 }
 
 export const getByInvoice = query({
@@ -40,11 +45,10 @@ export const getByInvoice = query({
   handler: async (ctx, args) => {
     const orders = await ctx.db
       .query("orderers")
-      .filter((q) => q.eq(q.field("invoice_id"), args.invoice_id))
+      .withIndex("by_invoice", (q) => q.eq("invoice_id", args.invoice_id))
       .order("desc")
       .collect();
 
-    // Just join with user names — actual_price & percentage are already stored
     return await Promise.all(
       orders.map(async (order) => {
         const user = await ctx.db.get(order.user_id);
@@ -74,7 +78,6 @@ export const create = mutation({
       updated_at: Date.now(),
     });
 
-    // Recalculate all orders in this invoice (including the new one)
     await recalcAllOrdersForInvoice(ctx, args.invoice_id);
 
     return id;
@@ -84,10 +87,15 @@ export const create = mutation({
 export const togglePaid = mutation({
   args: { id: v.id("orderers"), is_paid: v.boolean() },
   handler: async (ctx, args) => {
-    return await ctx.db.patch(args.id, {
+    const order = await ctx.db.get(args.id);
+    if (!order) return;
+
+    await ctx.db.patch(args.id, {
       is_paid: args.is_paid,
       updated_at: Date.now(),
     });
+
+    await syncInvoiceStatus(ctx, order.invoice_id);
   },
 });
 
@@ -105,7 +113,6 @@ export const update = mutation({
       updated_at: Date.now(),
     });
 
-    // Recalculate all orders in this invoice
     await recalcAllOrdersForInvoice(ctx, order.invoice_id);
   },
 });
@@ -118,7 +125,6 @@ export const deleteOrder = mutation({
 
     await ctx.db.delete(args.id);
 
-    // Recalculate remaining orders in this invoice
     await recalcAllOrdersForInvoice(ctx, order.invoice_id);
   },
 });
@@ -138,6 +144,10 @@ export const createDebtAdjustment = mutation({
       paid_amount: 0,
       date: dateStr,
       updated_at: Date.now(),
+      sort_time: getSortTime(dateStr, Date.now()),
+      total_orderers: 0,
+      paid_orderers: 0,
+      status: "empty",
     });
 
     await ctx.db.insert("orderers", {
@@ -161,17 +171,25 @@ export const markAllPaidForUser = mutation({
   handler: async (ctx, args) => {
     const unpaidOrders = await ctx.db
       .query("orderers")
-      .filter((q) => q.eq(q.field("user_id"), args.user_id))
-      .filter((q) => q.eq(q.field("is_paid"), false))
+      .withIndex("by_user_paid", (q) =>
+        q.eq("user_id", args.user_id).eq("is_paid", false),
+      )
       .collect();
 
+    const affectedInvoiceIds = new Set<Id<"invoices">>();
+
     await Promise.all(
-      unpaidOrders.map((order) =>
-        ctx.db.patch(order._id, {
+      unpaidOrders.map(async (order) => {
+        affectedInvoiceIds.add(order.invoice_id);
+        await ctx.db.patch(order._id, {
           is_paid: true,
           updated_at: Date.now(),
-        }),
-      ),
+        });
+      }),
     );
+
+    for (const invoiceId of affectedInvoiceIds) {
+      await syncInvoiceStatus(ctx, invoiceId);
+    }
   },
 });

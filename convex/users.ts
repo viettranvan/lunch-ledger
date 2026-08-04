@@ -6,7 +6,7 @@ export const getAll = query({
   handler: async (ctx) => {
     return await ctx.db
       .query("users")
-      .filter((q) => q.eq(q.field("is_active"), true))
+      .withIndex("by_active", (q) => q.eq("is_active", true))
       .order("desc")
       .collect();
   },
@@ -36,12 +36,12 @@ export const getDebtOverview = query({
   handler: async (ctx) => {
     const users = await ctx.db
       .query("users")
-      .filter((q) => q.eq(q.field("is_active"), true))
+      .withIndex("by_active", (q) => q.eq("is_active", true))
       .collect();
 
     const unpaidOrders = await ctx.db
       .query("orderers")
-      .filter((q) => q.eq(q.field("is_paid"), false))
+      .withIndex("by_paid", (q) => q.eq("is_paid", false))
       .collect();
 
     const overview = users.map((user) => {

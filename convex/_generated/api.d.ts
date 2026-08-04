@@ -9,6 +9,7 @@
  */
 
 import type * as invoices from "../invoices.js";
+import type * as lib_invoiceStatus from "../lib/invoiceStatus.js";
 import type * as orderers from "../orderers.js";
 import type * as users from "../users.js";
 
@@ -20,6 +21,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   invoices: typeof invoices;
+  "lib/invoiceStatus": typeof lib_invoiceStatus;
   orderers: typeof orderers;
   users: typeof users;
 }>;

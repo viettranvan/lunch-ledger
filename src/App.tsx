@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, usePaginatedQuery, useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import DebtOverview from "./components/DebtOverview";
@@ -8,13 +8,26 @@ import ActiveInvoiceView from "./components/ActiveInvoiceView";
 import "./App.css";
 
 function App() {
-  const users = useQuery(api.users.getAll);
-  const invoices = useQuery(api.invoices.getWithStatus);
-
   const [activeInvoiceId, setActiveInvoiceId] = useState<Id<"invoices"> | null>(
     null,
   );
   const [showAll, setShowAll] = useState(false);
+
+  const users = useQuery(api.users.getAll);
+  const {
+    results: invoices,
+    status: paginationStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.invoices.listPaginated,
+    { includeCompleted: showAll },
+    { initialNumItems: 20 },
+  );
+
+  const activeInvoice = useQuery(
+    api.invoices.getById,
+    activeInvoiceId ? { id: activeInvoiceId } : "skip",
+  );
 
   const createInvoice = useMutation(api.invoices.create);
   const createUser = useMutation(api.users.create);
@@ -55,13 +68,15 @@ function App() {
     setNewUserName("");
   };
 
-  if (users === undefined || invoices === undefined) {
+  if (users === undefined) {
     return <div className="loader">Đang tải dữ liệu...</div>;
   }
 
-  // Active Invoice View
   if (activeInvoiceId) {
-    const activeInvoice = invoices.find((inv) => inv._id === activeInvoiceId);
+    if (activeInvoice === undefined) {
+      return <div className="loader">Đang tải dữ liệu...</div>;
+    }
+
     const isAdjustmentInvoice =
       activeInvoice?.store_name.startsWith("Điều chỉnh nợ");
     return (
@@ -73,17 +88,25 @@ function App() {
           <h1>
             {activeInvoice?.store_name} {isAdjustmentInvoice ? "📝" : "🍔"}
           </h1>
-          {!isAdjustmentInvoice && (
+          {!isAdjustmentInvoice && activeInvoice && (
             <p>
               Tổng hóa đơn:{" "}
-              {activeInvoice?.paid_amount.toLocaleString("vi-VN")}đ
+              {activeInvoice.paid_amount.toLocaleString("vi-VN")}đ
             </p>
           )}
         </div>
 
-        <ActiveInvoiceView invoiceId={activeInvoiceId} users={users} invoice={activeInvoice} />
+        <ActiveInvoiceView
+          invoiceId={activeInvoiceId}
+          users={users}
+          invoice={activeInvoice ?? undefined}
+        />
       </div>
     );
+  }
+
+  if (paginationStatus === "LoadingFirstPage") {
+    return <div className="loader">Đang tải dữ liệu...</div>;
   }
 
   return (
@@ -93,7 +116,6 @@ function App() {
       </div>
 
       <div className="dashboard-grid">
-        {/* Full-width Debt Overview */}
         <div
           className="panel"
           style={{ gridColumn: "1 / -1", marginBottom: "1rem" }}
@@ -101,11 +123,25 @@ function App() {
           <DebtOverview />
         </div>
 
-        {/* Right column / Invoices list */}
         <div className="panel">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <h2>Hóa đơn gần đây</h2>
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+                fontSize: "0.85rem",
+                color: "var(--text-muted)",
+              }}
+            >
               <input
                 type="checkbox"
                 checked={showAll}
@@ -144,35 +180,38 @@ function App() {
             </button>
           </form>
 
-          {(() => {
-            if (!invoices || invoices.length === 0) {
-              return <div className="empty-state">Chưa có hóa đơn nào</div>;
-            }
-
-            const filtered = showAll
-              ? invoices
-              : invoices.filter((inv) => inv.status !== "completed");
-
-            if (filtered.length === 0) {
-              return <div className="empty-state">Tất cả hóa đơn đã hoàn tất 🎉</div>;
-            }
-
-            return (
+          {invoices.length === 0 ? (
+            <div className="empty-state">
+              {showAll
+                ? "Chưa có hóa đơn nào"
+                : "Tất cả hóa đơn đã hoàn tất 🎉"}
+            </div>
+          ) : (
+            <>
               <ul className="list-view">
-                {filtered.map((invoice) => (
+                {invoices.map((invoice) => (
                   <ExpandableInvoiceItem
                     key={invoice._id}
                     invoice={invoice}
-                    invoiceStatus={invoice.status}
+                    invoiceStatus={invoice.status ?? "empty"}
                     onClick={() => setActiveInvoiceId(invoice._id)}
                   />
                 ))}
               </ul>
-            );
-          })()}
+              {paginationStatus === "CanLoadMore" && (
+                <button
+                  type="button"
+                  className="submit-btn"
+                  onClick={() => loadMore(20)}
+                  style={{ width: "100%", marginTop: "1rem" }}
+                >
+                  Tải thêm
+                </button>
+              )}
+            </>
+          )}
         </div>
 
-        {/* Left column / Users */}
         <div className="panel">
           <h2>Thành viên</h2>
           <form className="inline-form" onSubmit={handleCreateUser}>

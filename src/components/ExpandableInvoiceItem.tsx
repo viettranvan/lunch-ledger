@@ -21,9 +21,13 @@ export default function ExpandableInvoiceItem({
     name: string;
   }>({ isOpen: false, type: "invoice", id: "" as Id<"invoices">, name: "" });
 
-  const orderers = useQuery(api.orderers.getByInvoice, {
-    invoice_id: invoice._id,
-  });
+  const isAdjustment = invoice.store_name.startsWith("Điều chỉnh nợ");
+  const shouldFetchOrderers = expanded || isAdjustment;
+
+  const orderers = useQuery(
+    api.orderers.getByInvoice,
+    shouldFetchOrderers ? { invoice_id: invoice._id } : "skip",
+  );
   const togglePaid = useMutation(api.orderers.togglePaid);
   const deleteOrder = useMutation(api.orderers.deleteOrder);
   const deleteInvoice = useMutation(api.invoices.deleteInvoice);
@@ -31,8 +35,6 @@ export default function ExpandableInvoiceItem({
   const formatNumber = (num: number) => {
     return num.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
   };
-
-  const isAdjustment = invoice.store_name.startsWith("Điều chỉnh nợ");
 
   const statusConfig = {
     completed: { label: "Hoàn tất", bg: "rgba(16, 185, 129, 0.2)", color: "#6ee7b7", border: "rgba(16, 185, 129, 0.3)" },

@@ -1,14 +1,20 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import parseAndCalculatePrice from "../utils/parseAndCalculatePrice";
+import {
+  buildTeamsDebtTable,
+  buildTeamsMentions,
+  copyRichText,
+} from "../utils/teamsCopy";
 
 export default function DebtOverview() {
   const debts = useQuery(api.users.getDebtOverview);
   const markAllPaidForUser = useMutation(api.orderers.markAllPaidForUser);
   const createDebtAdjustment = useMutation(api.orderers.createDebtAdjustment);
+  const sendDebtReminder = useAction(api.teamsNotify.sendDebtReminder);
 
   const [confirmPay, setConfirmPay] = useState<{
     isOpen: boolean;
@@ -32,45 +38,68 @@ export default function DebtOverview() {
 
   const [copied, setCopied] = useState(false);
   const [copiedMentions, setCopiedMentions] = useState(false);
+  const [sendingTeams, setSendingTeams] = useState(false);
+  const [teamsSendResult, setTeamsSendResult] = useState<string | null>(null);
 
-  const handleCopyDebtTable = () => {
+  const handleSendToTeams = async () => {
     if (!debts || debts.length === 0) return;
 
-    const header = "Thành viên\tChi tiết\tTổng nợ";
-    const rows = debts.map((d) => {
-      const details = d.details
-        .map((val) => {
-          const display = (Math.abs(val) / 1000).toLocaleString("vi-VN");
-          return val < 0 ? `-${display}` : display;
-        })
-        .join(" + ");
-      const total =
-        d.direction === "owes_you"
-          ? `Bạn nợ: ${d.absTotal.toLocaleString("vi-VN")}đ`
-          : `${d.totalDebt.toLocaleString("vi-VN")}đ`;
-      return `${d.name}\t${details}\t${total}`;
-    });
+    const owedDebts = debts.filter((d) => d.direction === "owed");
+    const missingEmail = owedDebts.filter((d) => !d.teams_email);
 
-    const tsv = [header, ...rows].join("\n");
+    if (missingEmail.length > 0) {
+      const names = missingEmail.map((d) => d.name).join(", ");
+      const proceed = window.confirm(
+        `${missingEmail.length} người chưa có Teams email (${names}). Họ sẽ không được mention. Tiếp tục gửi?`,
+      );
+      if (!proceed) return;
+    }
 
-    navigator.clipboard.writeText(tsv).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    setSendingTeams(true);
+    setTeamsSendResult(null);
+    try {
+      const result = await sendDebtReminder();
+      if (!result.sent) {
+        if (result.reason === "no_debts") {
+          setTeamsSendResult("Không có ai còn nợ.");
+        } else if (result.reason === "no_emails") {
+          setTeamsSendResult(
+            "Không gửi được — chưa có Teams email nào. Thêm email ở mục Thành viên.",
+          );
+        }
+      } else {
+        let msg = `Đã gửi nhắc nợ cho ${result.count} người vào channel Cơm Chưa.`;
+        if (result.missingEmail && result.missingEmail.length > 0) {
+          msg += ` (Bỏ qua: ${result.missingEmail.join(", ")})`;
+        }
+        setTeamsSendResult(msg);
+      }
+    } catch (err) {
+      setTeamsSendResult(
+        err instanceof Error ? err.message : "Gửi Teams thất bại.",
+      );
+    } finally {
+      setSendingTeams(false);
+      setTimeout(() => setTeamsSendResult(null), 5000);
+    }
   };
 
-  const handleCopyMentions = () => {
+  const handleCopyDebtTable = async () => {
     if (!debts || debts.length === 0) return;
 
-    const mentions = debts
-      .filter((d) => d.direction !== "owes_you")
-      .map((d) => `@${d.name} - ${d.totalDebt.toLocaleString("vi-VN")}đ`)
-      .join("\n");
+    const { html, plain } = buildTeamsDebtTable(debts);
+    await copyRichText(html, plain);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
-    navigator.clipboard.writeText(mentions).then(() => {
-      setCopiedMentions(true);
-      setTimeout(() => setCopiedMentions(false), 2000);
-    });
+  const handleCopyMentions = async () => {
+    if (!debts || debts.length === 0) return;
+
+    const { html, plain } = buildTeamsMentions(debts);
+    await copyRichText(html, plain);
+    setCopiedMentions(true);
+    setTimeout(() => setCopiedMentions(false), 2000);
   };
 
   if (debts === undefined) {
@@ -110,7 +139,7 @@ export default function DebtOverview() {
                 }
               }}
             >
-              {copied ? "✓ Đã copy" : "📋 Copy Slack"}
+              {copied ? "✓ Đã copy" : "📋 Copy Teams"}
             </button>
             <button
               onClick={handleCopyMentions}
@@ -139,11 +168,45 @@ export default function DebtOverview() {
               }
             }}
           >
-            {copiedMentions ? "✓ Đã copy" : "👥 Copy Mentions"}
+            {copiedMentions ? "✓ Đã copy" : "👥 Copy text"}
           </button>
+            <button
+              onClick={handleSendToTeams}
+              disabled={sendingTeams}
+              style={{
+                background: sendingTeams
+                  ? "rgba(110, 231, 183, 0.2)"
+                  : "rgba(99, 102, 241, 0.2)",
+                color: sendingTeams ? "#6ee7b7" : "#a5b4fc",
+                border: `1px solid ${sendingTeams ? "rgba(110, 231, 183, 0.3)" : "rgba(99, 102, 241, 0.4)"}`,
+                padding: "6px 14px",
+                borderRadius: "8px",
+                cursor: sendingTeams ? "wait" : "pointer",
+                fontSize: "0.85rem",
+                fontWeight: "500",
+                transition: "all 0.2s",
+                whiteSpace: "nowrap",
+                opacity: sendingTeams ? 0.7 : 1,
+              }}
+            >
+              {sendingTeams ? "Đang gửi..." : "📤 Gửi Teams"}
+            </button>
           </>
         )}
       </div>
+      {teamsSendResult && (
+        <p
+          style={{
+            margin: "8px 0 0",
+            fontSize: "0.85rem",
+            color: teamsSendResult.includes("thất bại") || teamsSendResult.includes("Không gửi")
+              ? "#fca5a5"
+              : "#6ee7b7",
+          }}
+        >
+          {teamsSendResult}
+        </p>
+      )}
       {debts.length === 0 ? (
         <div className="empty-state" style={{ padding: "2rem" }}>
           Tuyệt vời! Không ai còn nợ tiền ăn. 🎉

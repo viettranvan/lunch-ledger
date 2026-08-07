@@ -5,6 +5,7 @@ import type { Id } from "../convex/_generated/dataModel";
 import DebtOverview from "./components/DebtOverview";
 import ExpandableInvoiceItem from "./components/ExpandableInvoiceItem";
 import ActiveInvoiceView from "./components/ActiveInvoiceView";
+import UserChip from "./components/UserChip";
 import "./App.css";
 
 function App() {
@@ -233,9 +234,7 @@ function App() {
           ) : (
             <div className="user-chips">
               {users.map((user) => (
-                <div key={user._id} className="user-chip">
-                  👤 {user.name}
-                </div>
+                <UserChip key={user._id} user={user} />
               ))}
             </div>
           )}

@@ -12,6 +12,7 @@ export default defineSchema({
   users: defineTable({
     name: v.string(),
     is_active: v.boolean(),
+    teams_email: v.optional(v.string()),
   }).index("by_active", ["is_active"]),
   invoices: defineTable({
     store_name: v.string(),

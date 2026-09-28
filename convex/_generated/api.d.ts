@@ -8,12 +8,22 @@
  * @module
  */
 
-import type * as invoices from "../invoices.js";
-import type * as lib_invoiceStatus from "../lib/invoiceStatus.js";
-import type * as orderers from "../orderers.js";
-import type * as teamsNotify from "../teamsNotify.js";
-import type * as teamsNotifyQueries from "../teamsNotifyQueries.js";
-import type * as users from "../users.js";
+import type * as features_debts_helpers from "../features/debts/helpers.js";
+import type * as features_debts_internal from "../features/debts/internal.js";
+import type * as features_debts_mutations from "../features/debts/mutations.js";
+import type * as features_debts_queries from "../features/debts/queries.js";
+import type * as features_invoices_helpers from "../features/invoices/helpers.js";
+import type * as features_invoices_mutations from "../features/invoices/mutations.js";
+import type * as features_invoices_queries from "../features/invoices/queries.js";
+import type * as features_orders_helpers from "../features/orders/helpers.js";
+import type * as features_orders_mutations from "../features/orders/mutations.js";
+import type * as features_orders_queries from "../features/orders/queries.js";
+import type * as features_teams_internal from "../features/teams/internal.js";
+import type * as features_teams_mutations from "../features/teams/mutations.js";
+import type * as features_teams_queries from "../features/teams/queries.js";
+import type * as features_users_mutations from "../features/users/mutations.js";
+import type * as features_users_queries from "../features/users/queries.js";
+import type * as integrations_teams_actions from "../integrations/teams/actions.js";
 
 import type {
   ApiFromModules,
@@ -22,12 +32,22 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  invoices: typeof invoices;
-  "lib/invoiceStatus": typeof lib_invoiceStatus;
-  orderers: typeof orderers;
-  teamsNotify: typeof teamsNotify;
-  teamsNotifyQueries: typeof teamsNotifyQueries;
-  users: typeof users;
+  "features/debts/helpers": typeof features_debts_helpers;
+  "features/debts/internal": typeof features_debts_internal;
+  "features/debts/mutations": typeof features_debts_mutations;
+  "features/debts/queries": typeof features_debts_queries;
+  "features/invoices/helpers": typeof features_invoices_helpers;
+  "features/invoices/mutations": typeof features_invoices_mutations;
+  "features/invoices/queries": typeof features_invoices_queries;
+  "features/orders/helpers": typeof features_orders_helpers;
+  "features/orders/mutations": typeof features_orders_mutations;
+  "features/orders/queries": typeof features_orders_queries;
+  "features/teams/internal": typeof features_teams_internal;
+  "features/teams/mutations": typeof features_teams_mutations;
+  "features/teams/queries": typeof features_teams_queries;
+  "features/users/mutations": typeof features_users_mutations;
+  "features/users/queries": typeof features_users_queries;
+  "integrations/teams/actions": typeof integrations_teams_actions;
 }>;
 
 /**

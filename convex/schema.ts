@@ -14,6 +14,15 @@ export default defineSchema({
     is_active: v.boolean(),
     teams_email: v.optional(v.string()),
   }).index("by_active", ["is_active"]),
+  teams_settings: defineTable({
+    key: v.string(),
+    team_id: v.string(),
+    channel_id: v.string(),
+    channel_name: v.optional(v.string()),
+    tenant_id: v.string(),
+    qr_image_url: v.optional(v.string()),
+    updated_at: v.number(),
+  }).index("by_key", ["key"]),
   invoices: defineTable({
     store_name: v.string(),
     paid_amount: v.number(),

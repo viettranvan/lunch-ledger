@@ -1,6 +1,6 @@
 # Power Automate Setup — Gửi nhắc nợ vào Teams
 
-Hướng dẫn tạo flow gửi message có **@mention thật** vào channel **Cơm Chưa**.
+Hướng dẫn tạo flow gửi message có **@mention thật** vào channel Teams được chọn trong app.
 
 ## Thông tin channel
 
@@ -29,6 +29,11 @@ Paste vào **Request Body JSON Schema**:
 {
   "type": "object",
   "properties": {
+    "teamId": { "type": "string" },
+    "channelId": { "type": "string" },
+    "channelName": { "type": "string" },
+    "tenantId": { "type": "string" },
+    "qrImageUrl": { "type": "string" },
     "debts": {
       "type": "array",
       "items": {
@@ -44,7 +49,8 @@ Paste vào **Request Body JSON Schema**:
         "required": ["name", "email", "amount", "line"]
       }
     }
-  }
+  },
+  "required": ["teamId", "channelId", "tenantId", "debts"]
 }
 ```
 
@@ -108,16 +114,77 @@ Message hoàn chỉnh:
 @Julia — 40,078 + 36,384 = 76.462đ
 ```
 
-### 2c. Post message
+### 2c. Post Adaptive Card
 
 Sau vòng loop, thêm:
 
-- Action: **Post message in a chat or channel** (Microsoft Teams)
+- Action: **Post card in a chat or channel** (Microsoft Teams)
 - Post as: Flow bot (hoặc User — tùy connector)
 - Post in: **Channel**
-- Team: team chứa channel **Cơm Chưa**
-- Channel: **Cơm Chưa**
-- Message: `@{variables('MessageBody')}`
+- Team: chọn **Enter custom value**, sau đó chọn `teamId` từ dynamic content của HTTP trigger
+- Channel: chọn **Enter custom value**, sau đó chọn `channelId` từ dynamic content của HTTP trigger
+- Adaptive Card: dán JSON sau. Trong JSON, `MessageBody` và `qrImageUrl` được đọc động từ flow:
+
+```json
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.4",
+  "msteams": { "width": "Full" },
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "🍱 Tiền cơm",
+      "weight": "Bolder",
+      "size": "Medium",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "@{variables('MessageBody')}",
+      "wrap": true
+    },
+    {
+      "type": "Image",
+      "id": "qrThumb",
+      "url": "@{triggerBody()?['qrImageUrl']}",
+      "altText": "QR thanh toán",
+      "size": "Medium",
+      "selectAction": {
+        "type": "Action.ToggleVisibility",
+        "targetElements": ["qrPreview", "qrCollapse"]
+      }
+    },
+    {
+      "type": "Container",
+      "id": "qrPreview",
+      "isVisible": false,
+      "items": [
+        {
+          "type": "Image",
+          "url": "@{triggerBody()?['qrImageUrl']}",
+          "altText": "QR thanh toán kích thước lớn",
+          "size": "Stretch"
+        }
+      ]
+    },
+    {
+      "type": "ActionSet",
+      "id": "qrCollapse",
+      "isVisible": false,
+      "actions": [
+        {
+          "type": "Action.ToggleVisibility",
+          "title": "Thu gọn QR",
+          "targetElements": ["qrPreview", "qrCollapse"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Nếu Power Automate không xử lý expression trong JSON, đặt con trỏ vào giá trị `text` và `url`, sau đó bấm `/` hoặc lightning bolt để chèn lần lượt `MessageBody` và `qrImageUrl` từ dynamic content.
 
 ---
 
@@ -149,7 +216,7 @@ Email phải khớp tài khoản Microsoft 365 trong tenant.
 
 1. **Save** flow trong Power Automate
 2. Trong Lunch Ledger, bấm **📤 Gửi Teams** ở mục Tổng Nợ
-3. Kiểm tra channel **Cơm Chưa** — message có @mention thật
+3. Kiểm tra channel đã nhập trong phần **Cấu hình kênh Teams** — message có @mention thật
 
 ### Test webhook thủ công
 
@@ -157,6 +224,11 @@ Email phải khớp tài khoản Microsoft 365 trong tenant.
 curl -X POST "YOUR_WEBHOOK_URL" \
   -H "Content-Type: application/json" \
   -d '{
+    "teamId": "14545eec-51d2-4898-97df-bba08d5937b7",
+    "channelId": "19:...@thread.tacv2",
+    "channelName": "test_power_automate",
+    "tenantId": "a132a7f5-19fb-48f8-9ed0-5554d0f7652e",
+    "qrImageUrl": "https://your-cdn.example/qr.jpg",
     "debts": [
       {
         "name": "Julia Pham (Vinova)",
@@ -176,7 +248,12 @@ curl -X POST "YOUR_WEBHOOK_URL" \
 
 ```json
 {
-  "debts": [
+    "teamId": "14545eec-51d2-4898-97df-bba08d5937b7",
+    "channelId": "19:...@thread.tacv2",
+    "channelName": "test_power_automate",
+    "tenantId": "a132a7f5-19fb-48f8-9ed0-5554d0f7652e",
+    "qrImageUrl": "https://your-cdn.example/qr.jpg",
+    "debts": [
     {
       "name": "Julia Pham (Vinova)",
       "email": "julia@vinova.sg",
@@ -190,6 +267,10 @@ curl -X POST "YOUR_WEBHOOK_URL" \
 ```
 
 - `line` = `details` + ` = ` + `formatted_total` — field chính cho Append trong flow
+- `teamId` và `channelId` được lấy từ phần **Cấu hình kênh Teams** trong app
+- `channelName` là tùy chọn, dùng để hiển thị/đối chiếu; không dùng để route message
+- `tenantId` được lấy từ phần **Cấu hình kênh Teams** trong app
+- `qrImageUrl` được lấy từ phần **Cấu hình kênh Teams** trong app; để trống nếu không dùng QR
 - Chỉ gửi người có `direction = owed` (đang nợ tiền)
 - Chỉ gửi người đã có `teams_email`
 - `amount` tính bằng đồng (120000 = 120.000đ)

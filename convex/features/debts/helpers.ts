@@ -8,7 +8,14 @@ export type DebtOverviewItem = {
   absTotal: number;
   direction: "owed" | "owes_you";
   details: number[];
+  receivableTotal: number;
+  payableTotal: number;
 };
+
+export type DebtLedgerOrder = Pick<
+  Doc<"orderers">,
+  "user_id" | "actual_price"
+> & { invoice_type?: "receivable" | "payable" };
 
 export type DebtPayloadItem = {
   name: string;
@@ -22,20 +29,37 @@ export type DebtPayloadItem = {
 
 export function aggregateUserDebts(
   users: Doc<"users">[],
-  unpaidOrders: Doc<"orderers">[],
+  unpaidOrders: DebtLedgerOrder[],
 ): DebtOverviewItem[] {
-  const ordersByUser = new Map<Id<"users">, number[]>();
+  const ordersByUser = new Map<
+    Id<"users">,
+    { details: number[]; receivableTotal: number; payableTotal: number }
+  >();
 
   for (const order of unpaidOrders) {
-    const amounts = ordersByUser.get(order.user_id) ?? [];
-    amounts.push(order.actual_price);
-    ordersByUser.set(order.user_id, amounts);
+    const totals = ordersByUser.get(order.user_id) ?? {
+      details: [],
+      receivableTotal: 0,
+      payableTotal: 0,
+    };
+    const amount = Math.abs(order.actual_price);
+    const signedAmount = order.invoice_type === "payable" ? -amount : order.actual_price;
+    totals.details.push(signedAmount);
+    if (order.invoice_type === "payable") totals.payableTotal += amount;
+    else totals.receivableTotal += order.actual_price;
+    ordersByUser.set(order.user_id, totals);
   }
 
   return users
     .map((user) => {
-      const details = ordersByUser.get(user._id) ?? [];
-      const totalDebt = details.reduce((sum, amount) => sum + amount, 0);
+      const totals = ordersByUser.get(user._id) ?? {
+        details: [],
+        receivableTotal: 0,
+        payableTotal: 0,
+      };
+      const totalDebt = totals.receivableTotal - totals.payableTotal;
+      const direction: DebtOverviewItem["direction"] =
+        totalDebt > 0 ? "owed" : "owes_you";
 
       return {
         user_id: user._id,
@@ -43,8 +67,10 @@ export function aggregateUserDebts(
         teams_email: user.teams_email ?? null,
         totalDebt,
         absTotal: Math.abs(totalDebt),
-        direction: totalDebt > 0 ? ("owed" as const) : ("owes_you" as const),
-        details,
+        direction,
+        details: totals.details,
+        receivableTotal: totals.receivableTotal,
+        payableTotal: totals.payableTotal,
       };
     })
     .filter((userDebt) => userDebt.totalDebt !== 0)
@@ -53,11 +79,13 @@ export function aggregateUserDebts(
 
 function formatDetails(details: number[]): string {
   return details
-    .map((amount) => {
+    .map((amount, index) => {
       const display = (Math.abs(amount) / 1000).toLocaleString("vi-VN");
-      return amount < 0 ? `-${display}` : display;
+      if (index === 0) return amount < 0 ? `−${display}` : display;
+      const operator = amount < 0 ? "−" : "+";
+      return `${operator} ${display}`;
     })
-    .join(" + ");
+    .join(" ");
 }
 
 export function toTeamsDebtPayload(

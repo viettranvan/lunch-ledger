@@ -1,390 +1,456 @@
 import { useState } from "react";
-import { useQuery, useMutation, useAction } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import DebtAdjustmentDialog from "./DebtAdjustmentDialog";
-import ConfirmDialog from "../../../shared/components/ConfirmDialog";
 import Modal from "../../../shared/components/Modal";
+import ConfirmDialog from "../../../shared/components/ConfirmDialog";
+import { toast } from "../../../shared/lib/toast";
 
 function formatDebtDetails(details: number[]) {
-  return details
-    .map((amount) => {
-      const display = (Math.abs(amount) / 1000).toLocaleString("vi-VN");
-      return amount < 0 ? `-${display}` : display;
-    })
-    .join(" + ");
+  return details.reduce<string>((result, amount, index) => {
+    const display = (Math.abs(amount) / 1000).toLocaleString("vi-VN");
+    if (index === 0) return amount < 0 ? `−${display}` : display;
+    return `${result} ${amount < 0 ? "−" : "+"} ${display}`;
+  }, "");
 }
 
 export default function DebtOverview() {
   const debts = useQuery(api.features.debts.queries.getDebtOverview);
   const teamsConfig = useQuery(api.features.teams.queries.get);
-  const markAllPaidForUser = useMutation(api.features.debts.mutations.markAllPaidForUser);
-  const sendDebtReminder = useAction(api.integrations.teams.actions.sendDebtReminder);
-
-  const [confirmPay, setConfirmPay] = useState<{
-    isOpen: boolean;
-    userId: Id<"users">;
-    name: string;
-  }>({ isOpen: false, userId: "" as Id<"users">, name: "" });
-
-  const [adjustmentUser, setAdjustmentUser] = useState<{
-    userId: Id<"users">;
-    userName: string;
-  } | null>(null);
-
+  const sendDebtReminder = useAction(
+    api.integrations.teams.actions.sendDebtReminder,
+  );
+  const settleUserBalance = useMutation(
+    api.features.orders.mutations.settleUserBalance,
+  );
   const [sendingTeams, setSendingTeams] = useState(false);
-  const [teamsSendResult, setTeamsSendResult] = useState<string | null>(null);
+  const [settlingUserId, setSettlingUserId] = useState<Id<"users"> | null>(null);
+  const [isSettling, setIsSettling] = useState(false);
   const [isTeamsPreviewOpen, setIsTeamsPreviewOpen] = useState(false);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<Id<"invoices"> | null>(null);
+  const [selectedDebtUserId, setSelectedDebtUserId] = useState<Id<"users"> | null>(null);
+  const selectedInvoice = useQuery(
+    api.features.invoices.queries.getById,
+    selectedInvoiceId ? { id: selectedInvoiceId } : "skip",
+  );
+  const selectedInvoiceOrders = useQuery(
+    api.features.orders.queries.getByInvoice,
+    selectedInvoiceId ? { invoice_id: selectedInvoiceId } : "skip",
+  );
+  const debtToSettle = settlingUserId
+    ? debts?.find((debt) => debt.user_id === settlingUserId) ?? null
+    : null;
 
-  const handleSendToTeams = () => {
-    if (!debts || debts.length === 0) return;
-
-    setTeamsSendResult(null);
-    setIsTeamsPreviewOpen(true);
+  const closeInvoiceModal = () => {
+    setSelectedInvoiceId(null);
+    setSelectedDebtUserId(null);
   };
 
   const handleConfirmSendToTeams = async () => {
-    if (!debts || debts.length === 0) return;
-
     setIsTeamsPreviewOpen(false);
     setSendingTeams(true);
-    setTeamsSendResult(null);
     try {
       const result = await sendDebtReminder();
       if (!result.sent) {
         if (result.reason === "no_debts") {
-          setTeamsSendResult("Không có ai còn nợ.");
+          toast.info("Không có khoản phải thu cần nhắc.");
         } else if (result.reason === "no_emails") {
-          setTeamsSendResult(
+          toast.warning(
             "Không gửi được — chưa có Teams email nào. Thêm email ở mục Thành viên.",
           );
         }
       } else {
-        let msg = `Đã gửi nhắc nợ cho ${result.count} người vào Teams.`;
-        if (result.missingEmail && result.missingEmail.length > 0) {
-          msg += ` (Bỏ qua: ${result.missingEmail.join(", ")})`;
+        let message = `Đã gửi nhắc nợ cho ${result.count} người vào Teams.`;
+        if (result.missingEmail?.length) {
+          message += ` (Bỏ qua: ${result.missingEmail.join(", ")})`;
         }
-        setTeamsSendResult(msg);
+        toast.success(message);
       }
-    } catch (err) {
-      setTeamsSendResult(
-        err instanceof Error ? err.message : "Gửi Teams thất bại.",
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Gửi Teams thất bại.",
       );
     } finally {
       setSendingTeams(false);
-      setTimeout(() => setTeamsSendResult(null), 5000);
+    }
+  };
+
+  const handleConfirmSettleUser = async () => {
+    if (!debtToSettle) return;
+
+    setIsSettling(true);
+    try {
+      const result = await settleUserBalance({
+        user_id: debtToSettle.user_id,
+        expected_net_amount: debtToSettle.totalDebt,
+      });
+      setSettlingUserId(null);
+      toast.success(
+        `Đã đối soát với ${debtToSettle.name}: ${Math.abs(result.net_amount).toLocaleString("vi-VN")}đ qua ${result.affected_invoice_count} hóa đơn.`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Không thể đối soát số dư.",
+      );
+    } finally {
+      setIsSettling(false);
     }
   };
 
   if (debts === undefined) {
-    return <div className="loader">Đang tải nợ...</div>;
+    return <div className="loader">Đang tải công nợ...</div>;
   }
 
-  const owedDebts = debts.filter((debt) => debt.direction === "owed");
-  const sendableDebts = owedDebts.filter((debt) => debt.teams_email);
-  const missingEmailDebts = owedDebts.filter((debt) => !debt.teams_email);
+  const receivables = debts.filter((debt) => debt.direction === "owed");
+  const sendableDebts = receivables.filter((debt) => debt.teams_email);
+  const missingEmailDebts = receivables.filter((debt) => !debt.teams_email);
 
   return (
-    <div style={{ width: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <h2 style={{ margin: 0 }}>Tổng Nợ</h2>
-        {debts.length > 0 && (
+    <div className="debt-overview">
+      <div className="debt-overview-heading">
+        <h2>Tổng nợ</h2>
+        {receivables.length > 0 && (
           <button
-              onClick={handleSendToTeams}
-              disabled={sendingTeams}
-              style={{
-                background: sendingTeams
-                  ? "rgba(110, 231, 183, 0.2)"
-                  : "rgba(99, 102, 241, 0.2)",
-                color: sendingTeams ? "#6ee7b7" : "#a5b4fc",
-                border: `1px solid ${sendingTeams ? "rgba(110, 231, 183, 0.3)" : "rgba(99, 102, 241, 0.4)"}`,
-                padding: "6px 14px",
-                borderRadius: "8px",
-                cursor: sendingTeams ? "wait" : "pointer",
-                fontSize: "0.85rem",
-                fontWeight: "500",
-                transition: "all 0.2s",
-                whiteSpace: "nowrap",
-                opacity: sendingTeams ? 0.7 : 1,
-              }}
-            >
-              {sendingTeams ? "Đang gửi..." : "📤 Gửi Teams"}
-            </button>
+            type="button"
+            className="debt-send-teams"
+            onClick={() => setIsTeamsPreviewOpen(true)}
+            disabled={sendingTeams}
+          >
+            {sendingTeams ? "Đang gửi…" : "📤 Gửi Teams"}
+          </button>
         )}
       </div>
-      {teamsSendResult && (
-        <p
-          style={{
-            margin: "8px 0 0",
-            fontSize: "0.85rem",
-            color: teamsSendResult.includes("thất bại") || teamsSendResult.includes("Không gửi")
-              ? "#fca5a5"
-              : "#6ee7b7",
-          }}
-        >
-          {teamsSendResult}
-        </p>
-      )}
+
       {debts.length === 0 ? (
         <div className="empty-state" style={{ padding: "2rem" }}>
-          Tuyệt vời! Không ai còn nợ tiền ăn. 🎉
+          Không còn khoản phải thu hoặc phải trả nào. 🎉
         </div>
       ) : (
         <div className="invoice-details-table-container">
-          <table className="invoice-details-table">
+          <table className="invoice-details-table debt-overview-table">
             <thead>
               <tr>
-                <th
-                  style={{
-                    textAlign: "left",
-                    paddingLeft: "1.5rem",
-                    width: "25%",
-                  }}
-                >
-                  Thành viên
-                </th>
-                <th style={{ textAlign: "center", width: "40%" }}>
-                  Chi tiết nợ
-                </th>
-                <th
-                  style={{
-                    textAlign: "right",
-                    width: "20%",
-                  }}
-                >
-                  Tổng nợ
-                </th>
-                <th
-                  style={{
-                    textAlign: "center",
-                    paddingRight: "1.5rem",
-                    width: "15%",
-                  }}
-                >
-                  Hành động
-                </th>
+                <th className="debt-member-heading">Thành viên</th>
+                <th>Chi tiết ròng</th>
+                <th className="debt-net-heading">Số dư ròng</th>
+                <th className="debt-action-heading">Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              {debts.map((userDebt) => (
-                <tr key={userDebt.user_id}>
-                  <td style={{ textAlign: "left", paddingLeft: "1.5rem" }}>
-                    <strong
-                      style={{ color: "var(--text-main)", fontSize: "1.05rem" }}
-                    >
-                      {userDebt.name}
-                    </strong>
-                  </td>
-                  <td
-                    style={{
-                      textAlign: "center",
-                      fontStyle: "italic",
-                      opacity: 0.8,
-                    }}
-                  >
-                    {formatDebtDetails(userDebt.details)}
-                  </td>
-                  <td
-                    style={{
-                      textAlign: "right",
-                      color:
-                        userDebt.direction === "owes_you"
-                          ? "#6ee7b7"
-                          : "#f472b6",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {userDebt.direction === "owes_you"
-                      ? `Bạn nợ: ${userDebt.absTotal.toLocaleString("vi-VN")}đ`
-                      : `${userDebt.totalDebt.toLocaleString("vi-VN")}đ`}
-                  </td>
-                  <td style={{ textAlign: "center", paddingRight: "1.5rem" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "8px",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {userDebt.direction === "owed" && (
-                        <button
-                          onClick={() => {
-                            setAdjustmentUser({
-                              userId: userDebt.user_id as Id<"users">,
-                              userName: userDebt.name,
-                            });
-                          }}
-                          style={{
-                            background: "rgba(245, 158, 11, 0.2)",
-                            color: "#fbbf24",
-                            border: "1px solid rgba(245, 158, 11, 0.3)",
-                            padding: "6px 12px",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            fontSize: "0.85rem",
-                            fontWeight: "500",
-                            transition: "background 0.2s",
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.currentTarget.style.background =
-                              "rgba(245, 158, 11, 0.3)")
-                          }
-                          onMouseLeave={(e) =>
-                            (e.currentTarget.style.background =
-                              "rgba(245, 158, 11, 0.2)")
-                          }
-                        >
-                          Trừ nợ
-                        </button>
-                      )}
-                      {userDebt.direction === "owed" && (
-                        <button
-                          onClick={() => {
-                            setConfirmPay({
-                              isOpen: true,
-                              userId: userDebt.user_id as Id<"users">,
-                              name: userDebt.name,
-                            });
-                          }}
-                          style={{
-                            background: "var(--accent)",
-                            color: "white",
-                            border: "none",
-                            padding: "6px 12px",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            fontSize: "0.85rem",
-                            fontWeight: "500",
-                            transition: "background 0.2s",
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.currentTarget.style.background =
-                              "var(--accent-hover)")
-                          }
-                          onMouseLeave={(e) =>
-                            (e.currentTarget.style.background = "var(--accent)")
-                          }
-                        >
-                          Đã thanh toán
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {debts.map((debt) => {
+                const entries = [...debt.entries].sort((a, b) =>
+                  b.date.localeCompare(a.date),
+                );
+
+                return (
+                  <tr key={debt.user_id}>
+                    <td className="debt-member-cell" data-label="Thành viên">
+                      <strong>{debt.name}</strong>
+                    </td>
+                    <td className="debt-breakdown-cell" data-label="Chi tiết ròng">
+                      <div className="debt-entry-list">
+                        {entries.map((entry, index) => (
+                          <button
+                            key={`${entry.invoice_id}-${index}`}
+                            type="button"
+                            className={`debt-entry ${entry.amount < 0 ? "payable" : "receivable"}`}
+                            onClick={() => {
+                              setSelectedDebtUserId(debt.user_id);
+                              setSelectedInvoiceId(entry.invoice_id);
+                            }}
+                            aria-label={`Hóa đơn ${entry.store_name}, ngày ${entry.date}: ${entry.amount < 0 ? "phải trả" : "phải thu"} ${Math.abs(entry.amount).toLocaleString("vi-VN")} đồng`}
+                            title={`${entry.store_name} · ${entry.date.split("-").reverse().join("/")}`}
+                          >
+                            <strong>
+                              {entry.amount < 0 ? "−" : "+"}
+                              {Math.abs(entry.amount).toLocaleString("vi-VN")}đ
+                            </strong>
+                            <span>
+                              {entry.date.split("-").reverse().join("/")}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                    <td className={`debt-net-cell ${debt.direction}`} data-label="Số dư ròng">
+                      <strong>{debt.absTotal.toLocaleString("vi-VN")}đ</strong>
+                    </td>
+                    <td className="debt-action-cell" data-label="Thao tác">
+                      <button
+                        type="button"
+                        className={`debt-settlement-icon-button ${debt.direction}`}
+                        onClick={() => setSettlingUserId(debt.user_id)}
+                        aria-label={`${debt.direction === "owed" ? "Xác nhận đã thu" : "Xác nhận đã trả"} ${debt.absTotal.toLocaleString("vi-VN")} đồng từ ${debt.name}`}
+                        title={`${debt.direction === "owed" ? "Xác nhận đã thu" : "Xác nhận đã trả"} ${debt.absTotal.toLocaleString("vi-VN")}đ`}
+                        disabled={isSettling}
+                      >
+                        <svg viewBox="0 0 20 20" aria-hidden="true">
+                          <path d="m4 10 4 4 8-8" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      {confirmPay.isOpen && (
+      {debtToSettle && (
         <ConfirmDialog
-          title="Xác nhận thanh toán"
-          message={`Xác nhận ${confirmPay.name} đã thanh toán toàn bộ nợ?`}
-          confirmLabel="Xác nhận"
-          confirmStyle={{ background: "var(--accent)" }}
-          onCancel={() =>
-            setConfirmPay((prev) => ({ ...prev, isOpen: false }))
+          title={`Đối soát với ${debtToSettle.name}`}
+          message={
+            <>
+              <span style={{ display: "block" }}>
+                Họ nợ bạn {debtToSettle.receivableTotal.toLocaleString("vi-VN")}đ ·
+                bạn nợ họ {debtToSettle.payableTotal.toLocaleString("vi-VN")}đ.
+              </span>
+              <strong style={{ display: "block", margin: "0.5rem 0" }}>
+                {debtToSettle.direction === "owed" ? debtToSettle.name : "Bạn"} sẽ {debtToSettle.direction === "owed" ? "chuyển bạn" : "trả họ"}{" "}
+                {debtToSettle.absTotal.toLocaleString("vi-VN")}đ.
+              </strong>
+              <span style={{ display: "block" }}>
+                Xác nhận sẽ đánh dấu {debtToSettle.entries.length} khoản chưa thanh toán
+                trong {new Set(debtToSettle.entries.map((entry) => entry.invoice_id)).size} hóa đơn giữa hai người là đã đối soát.
+              </span>
+            </>
           }
-          onConfirm={async () => {
-            await markAllPaidForUser({ user_id: confirmPay.userId });
-            setConfirmPay((prev) => ({ ...prev, isOpen: false }));
-          }}
+          confirmLabel={debtToSettle.direction === "owed" ? "Xác nhận đã thu" : "Xác nhận đã trả"}
+          onCancel={() => setSettlingUserId(null)}
+          onConfirm={handleConfirmSettleUser}
+          isLoading={isSettling}
         />
       )}
 
-      {adjustmentUser && (
-        <DebtAdjustmentDialog
-          userId={adjustmentUser.userId}
-          userName={adjustmentUser.userName}
-          currentDebt={
-            debts.find((debt) => debt.user_id === adjustmentUser.userId)
-              ?.totalDebt ?? 0
-          }
-          onClose={() => setAdjustmentUser(null)}
-        />
+      {selectedInvoiceId && (
+        <Modal
+          className="debt-invoice-modal"
+          ariaLabelledBy="debt-invoice-title"
+          onClose={closeInvoiceModal}
+        >
+          <div className="debt-invoice-header">
+            <div>
+              <span className="teams-preview-eyebrow">CHI TIẾT HÓA ĐƠN</span>
+              <h3 id="debt-invoice-title">
+                {selectedInvoice?.store_name ?? "Đang tải hóa đơn..."}
+              </h3>
+              {selectedInvoice && (
+                <p>
+                  {selectedInvoice.date
+                    ? selectedInvoice.date.split("-").reverse().join("/")
+                    : new Date(selectedInvoice._creationTime).toLocaleDateString("vi-VN")}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="teams-preview-close"
+              onClick={closeInvoiceModal}
+              aria-label="Đóng chi tiết hóa đơn"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="debt-invoice-body">
+            {selectedInvoice === undefined || selectedInvoiceOrders === undefined ? (
+              <div className="loader" role="status" aria-live="polite">
+                Đang tải chi tiết hóa đơn...
+              </div>
+            ) : selectedInvoice === null ? (
+              <div className="empty-state">Không tìm thấy hóa đơn này.</div>
+            ) : (
+              <>
+                <div className="debt-invoice-summary">
+                  <span>
+                    {selectedInvoice.invoice_type === "payable"
+                      ? "Bạn phải trả"
+                      : "Tổng hóa đơn"}
+                  </span>
+                  <strong>
+                    {selectedInvoice.paid_amount.toLocaleString("vi-VN")}đ
+                  </strong>
+                </div>
+                {selectedInvoiceOrders.length === 0 ? (
+                  <div className="empty-state">Hóa đơn chưa có chi tiết.</div>
+                ) : (
+                  <div className="invoice-details-table-container debt-invoice-orders">
+                    <table className="invoice-details-table">
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left" }}>
+                            {selectedInvoice.invoice_type === "payable"
+                              ? "Chủ nợ"
+                              : "Thành viên"}
+                          </th>
+                          <th>
+                            {selectedInvoice.invoice_type === "payable"
+                              ? "Khoản phải trả"
+                              : "Phần ăn"}
+                          </th>
+                          <th>
+                            {selectedInvoice.invoice_type === "payable"
+                              ? "Số tiền trả"
+                              : "Số tiền phải thu"}
+                          </th>
+                          <th>Trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedInvoiceOrders.map((order) => (
+                          <tr
+                            key={order._id}
+                            className={
+                              order.user_id === selectedDebtUserId
+                                ? "debt-invoice-member-highlight"
+                                : undefined
+                            }
+                          >
+                            <td
+                              data-label={
+                                selectedInvoice.invoice_type === "payable"
+                                  ? "Chủ nợ"
+                                  : "Thành viên"
+                              }
+                              style={{ textAlign: "left" }}
+                            >
+                              {order.user_name}
+                              {order.user_id === selectedDebtUserId && (
+                                <span className="debt-invoice-member-current">
+                                  Đang xem
+                                </span>
+                              )}
+                            </td>
+                            <td
+                              data-label={
+                                selectedInvoice.invoice_type === "payable"
+                                  ? "Khoản phải trả"
+                                  : "Phần ăn"
+                              }
+                            >
+                              {selectedInvoice.invoice_type === "payable"
+                                ? "—"
+                                : `${order.item_price.toLocaleString("vi-VN")}đ`}
+                            </td>
+                            <td
+                              data-label={
+                                selectedInvoice.invoice_type === "payable"
+                                  ? "Số tiền trả"
+                                  : "Số tiền phải thu"
+                              }
+                            >
+                              {order.actual_price.toLocaleString("vi-VN")}đ
+                            </td>
+                            <td data-label="Trạng thái">
+                              <span
+                                className={`invoice-payment-status ${order.is_paid ? "paid" : "unpaid"}`}
+                              >
+                                {order.is_paid
+                                  ? selectedInvoice.invoice_type === "payable"
+                                    ? "Đã trả"
+                                    : "Đã thu"
+                                  : selectedInvoice.invoice_type === "payable"
+                                    ? "Chưa trả"
+                                    : "Chưa thu"}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Modal>
       )}
 
-      {isTeamsPreviewOpen &&
+      {isTeamsPreviewOpen && (
         <Modal
           className="teams-preview-modal"
           onClose={() => setIsTeamsPreviewOpen(false)}
         >
-              <div className="teams-preview-header">
-                <div>
-                  <span className="teams-preview-eyebrow">PREVIEW</span>
-                  <h3 id="teams-preview-title">Kiểm tra trước khi gửi</h3>
-                </div>
-                <button
-                  type="button"
-                  className="teams-preview-close"
-                  onClick={() => setIsTeamsPreviewOpen(false)}
-                  aria-label="Đóng preview"
-                >
-                  ×
-                </button>
-              </div>
+          <div className="teams-preview-header">
+            <div>
+              <span className="teams-preview-eyebrow">PREVIEW</span>
+              <h3 id="teams-preview-title">Kiểm tra trước khi gửi</h3>
+            </div>
+            <button
+              type="button"
+              className="teams-preview-close"
+              onClick={() => setIsTeamsPreviewOpen(false)}
+              aria-label="Đóng preview"
+            >
+              ×
+            </button>
+          </div>
 
-              <div className="teams-preview-destination">
-                <span>Gửi tới</span>
-                <strong>
-                  {teamsConfig?.channel_name || "Kênh Teams đã cấu hình"}
-                </strong>
-              </div>
+          <div className="teams-preview-destination">
+            <span>Gửi tới</span>
+            <strong>
+              {teamsConfig?.channel_name || "Kênh Teams đã cấu hình"}
+            </strong>
+          </div>
 
-              {sendableDebts.length > 0 ? (
-                <div className="teams-preview-message">
-                  <p className="teams-preview-section-title">
-                    Danh sách nhắc nợ ({sendableDebts.length})
-                  </p>
-                  <div className="teams-preview-list">
-                    {sendableDebts.map((debt) => (
-                      <div className="teams-preview-debt" key={debt.user_id}>
-                        <div className="teams-preview-debt-heading">
-                          <div className="teams-preview-debt-person">
-                            <strong>{debt.name}</strong>
-                            <span>{debt.teams_email}</span>
-                          </div>
-                          <strong className="teams-preview-debt-total">
-                            {debt.totalDebt.toLocaleString("vi-VN")}đ
-                          </strong>
-                        </div>
-                        <p>
-                          Chi tiết: {formatDebtDetails(debt.details)}
-                        </p>
+          {sendableDebts.length > 0 ? (
+            <div className="teams-preview-message">
+              <p className="teams-preview-section-title">
+                Danh sách nhắc nợ ({sendableDebts.length})
+              </p>
+              <div className="teams-preview-list">
+                {sendableDebts.map((debt) => (
+                  <div className="teams-preview-debt" key={debt.user_id}>
+                    <div className="teams-preview-debt-heading">
+                      <div className="teams-preview-debt-person">
+                        <strong>{debt.name}</strong>
+                        <span>{debt.teams_email}</span>
                       </div>
-                    ))}
+                      <strong className="teams-preview-debt-total">
+                        {debt.totalDebt.toLocaleString("vi-VN")}đ
+                      </strong>
+                    </div>
+                    <p>
+                      Chi tiết ròng: {formatDebtDetails(debt.details)} ={" "}
+                      {debt.totalDebt.toLocaleString("vi-VN")}đ
+                    </p>
                   </div>
-                </div>
-              ) : (
-                <div className="teams-preview-empty">
-                  Không có thành viên nào có Teams email để mention.
-                </div>
-              )}
-
-              {missingEmailDebts.length > 0 && (
-                <p className="teams-preview-warning">
-                  Bỏ qua {missingEmailDebts.length} người do thiếu Teams email: {" "}
-                  {missingEmailDebts.map((debt) => debt.name).join(", ")}.
-                </p>
-              )}
-
-              <div className="custom-modal-actions">
-                <button
-                  className="cancel-btn"
-                  onClick={() => setIsTeamsPreviewOpen(false)}
-                >
-                  Hủy
-                </button>
-                <button
-                  className="confirm-btn teams-preview-send-btn"
-                  onClick={handleConfirmSendToTeams}
-                  disabled={sendingTeams || sendableDebts.length === 0}
-                >
-                  Gửi ngay
-                </button>
+                ))}
               </div>
-        </Modal>}
+            </div>
+          ) : (
+            <div className="teams-preview-empty">
+              Không có thành viên nào có Teams email để mention.
+            </div>
+          )}
+
+          {missingEmailDebts.length > 0 && (
+            <p className="teams-preview-warning">
+              Bỏ qua {missingEmailDebts.length} người do thiếu Teams email:{" "}
+              {missingEmailDebts.map((debt) => debt.name).join(", ")}.
+            </p>
+          )}
+
+          <div className="custom-modal-actions">
+            <button
+              type="button"
+              className="cancel-btn"
+              onClick={() => setIsTeamsPreviewOpen(false)}
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              className="confirm-btn teams-preview-send-btn"
+              onClick={handleConfirmSendToTeams}
+              disabled={sendingTeams || sendableDebts.length === 0}
+            >
+              Gửi ngay
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

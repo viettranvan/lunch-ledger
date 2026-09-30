@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
+import { toast } from "../../../shared/lib/toast";
 import {
   getDefaultTeamsChannelConfig,
   readTeamsChannelConfig,
@@ -12,9 +13,7 @@ export default function TeamsSettingsPage() {
   const storedConfig = useQuery(api.features.teams.queries.get);
   const saveConfig = useMutation(api.features.teams.mutations.save);
   const [config, setConfig] = useState<TeamsChannelConfig>(readTeamsChannelConfig);
-  const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (storedConfig === undefined || storedConfig === null) return;
@@ -40,7 +39,6 @@ export default function TeamsSettingsPage() {
     };
 
     setIsSaving(true);
-    setSaveError(null);
     try {
       await saveConfig({
         team_id: nextConfig.teamId,
@@ -50,10 +48,9 @@ export default function TeamsSettingsPage() {
         qr_image_url: nextConfig.qrImageUrl || undefined,
       });
       setConfig(nextConfig);
-      setSaved(true);
-      window.setTimeout(() => setSaved(false), 2500);
+      toast.success("Đã lưu cấu hình kênh Teams.");
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Không thể lưu cấu hình.");
+      toast.error(error instanceof Error ? error.message : "Không thể lưu cấu hình.");
     } finally {
       setIsSaving(false);
     }
@@ -62,8 +59,7 @@ export default function TeamsSettingsPage() {
   const resetToDefaults = () => {
     const defaults = getDefaultTeamsChannelConfig();
     setConfig(defaults);
-    setSaved(false);
-    setSaveError(null);
+    toast.info("Đã khôi phục mặc định trên biểu mẫu. Hãy lưu để áp dụng.");
   };
 
   return (
@@ -166,15 +162,13 @@ export default function TeamsSettingsPage() {
 
           <div className="teams-settings-actions">
             <button type="submit" className="submit-btn small-btn">
-              {isSaving ? "Đang lưu..." : saved ? "Đã lưu cấu hình" : "Lưu cấu hình"}
+              {isSaving ? "Đang lưu..." : "Lưu cấu hình"}
             </button>
             <button type="button" className="teams-settings-reset" onClick={resetToDefaults}>
               Khôi phục mặc định
             </button>
           </div>
         </form>
-
-        {saveError && <p className="teams-settings-error">{saveError}</p>}
 
         <p className="teams-settings-note">
           Cấu hình được lưu trong Convex và dùng chung cho workspace. Webhook Power

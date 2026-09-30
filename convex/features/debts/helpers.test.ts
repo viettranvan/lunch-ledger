@@ -3,6 +3,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import {
   aggregateUserDebts,
   toTeamsDebtPayload,
+  type DebtLedgerOrder,
 } from "./helpers";
 
 function makeUser(
@@ -19,33 +20,34 @@ function makeUser(
   };
 }
 
-function makeOrder(userId: string, actualPrice: number): Doc<"orderers"> {
+function makeOrder(
+  userId: string,
+  actualPrice: number,
+  invoice_type: "receivable" | "payable" = "receivable",
+): DebtLedgerOrder {
   return {
-    _id: `order-${userId}-${actualPrice}` as Id<"orderers">,
-    _creationTime: 0,
     user_id: userId as Id<"users">,
-    invoice_id: "invoice" as Id<"invoices">,
-    item_price: actualPrice,
     actual_price: actualPrice,
-    is_paid: false,
-    percentage: 0,
+    invoice_type,
   };
 }
 
 describe("aggregateUserDebts", () => {
-  it("aggregates positive and negative balances and excludes zero balances", () => {
+  it("nets receivables and payables by member and excludes zero balances", () => {
     const debts = aggregateUserDebts(
       [
         makeUser("u1", "An", "an@example.com"),
         makeUser("u2", "Bình"),
         makeUser("u3", "Chi"),
+        makeUser("u4", "Dũng"),
       ],
       [
         makeOrder("u1", 50_000),
-        makeOrder("u1", 10_000),
-        makeOrder("u2", -20_000),
-        makeOrder("u3", 30_000),
-        makeOrder("u3", -30_000),
+        makeOrder("u1", 20_000, "payable"),
+        makeOrder("u2", 10_000),
+        makeOrder("u3", 40_000, "payable"),
+        makeOrder("u4", 20_000),
+        makeOrder("u4", 20_000, "payable"),
       ],
     );
 
@@ -54,19 +56,34 @@ describe("aggregateUserDebts", () => {
         user_id: "u1",
         name: "An",
         teams_email: "an@example.com",
-        totalDebt: 60_000,
-        absTotal: 60_000,
+        totalDebt: 30_000,
+        absTotal: 30_000,
         direction: "owed",
-        details: [50_000, 10_000],
+        details: [50_000, -20_000],
+        receivableTotal: 50_000,
+        payableTotal: 20_000,
       },
       {
         user_id: "u2",
         name: "Bình",
         teams_email: null,
-        totalDebt: -20_000,
-        absTotal: 20_000,
+        totalDebt: 10_000,
+        absTotal: 10_000,
+        direction: "owed",
+        details: [10_000],
+        receivableTotal: 10_000,
+        payableTotal: 0,
+      },
+      {
+        user_id: "u3",
+        name: "Chi",
+        teams_email: null,
+        totalDebt: -40_000,
+        absTotal: 40_000,
         direction: "owes_you",
-        details: [-20_000],
+        details: [-40_000],
+        receivableTotal: 0,
+        payableTotal: 40_000,
       },
     ]);
   });
@@ -78,17 +95,21 @@ describe("aggregateUserDebts", () => {
   it("creates the owed-only Teams payload and preserves missing emails", () => {
     const debts = aggregateUserDebts(
       [makeUser("u1", "An", "an@example.com"), makeUser("u2", "Bình")],
-      [makeOrder("u1", 50_000), makeOrder("u2", 30_000)],
+      [
+        makeOrder("u1", 50_000),
+        makeOrder("u1", 20_000, "payable"),
+        makeOrder("u2", 30_000),
+      ],
     );
 
     expect(toTeamsDebtPayload(debts)).toEqual([
       {
         name: "An",
         email: "an@example.com",
-        amount: 50_000,
-        formatted_total: "50.000đ",
-        details: "50",
-        line: "50 = 50.000đ",
+        amount: 30_000,
+        formatted_total: "30.000đ",
+        details: "50 − 20",
+        line: "50 − 20 = 30.000đ",
         direction: "owed",
       },
       {

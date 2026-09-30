@@ -8,6 +8,7 @@ type ConfirmDialogProps = {
   onCancel: () => void;
   onConfirm: () => void | Promise<void>;
   confirmStyle?: CSSProperties;
+  isLoading?: boolean;
 };
 
 export default function ConfirmDialog({
@@ -17,21 +18,23 @@ export default function ConfirmDialog({
   onCancel,
   onConfirm,
   confirmStyle,
+  isLoading = false,
 }: ConfirmDialogProps) {
   return (
     <Modal onClose={onCancel}>
       <h3>{title}</h3>
       <p>{message}</p>
       <div className="custom-modal-actions">
-        <button className="cancel-btn" onClick={onCancel}>
+        <button className="cancel-btn" onClick={onCancel} disabled={isLoading}>
           Hủy
         </button>
         <button
           className="confirm-btn"
           onClick={() => void onConfirm()}
           style={confirmStyle}
+          disabled={isLoading}
         >
-          {confirmLabel}
+          {isLoading ? "Đang xử lý..." : confirmLabel}
         </button>
       </div>
     </Modal>

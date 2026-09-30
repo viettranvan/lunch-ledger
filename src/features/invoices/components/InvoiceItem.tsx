@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import type { Id, Doc } from "../../../../convex/_generated/dataModel";
-import ConfirmDialog from "../../../shared/components/ConfirmDialog";
+import type { Doc } from "../../../../convex/_generated/dataModel";
+import { toast } from "../../../shared/lib/toast";
 
 type InvoiceStatus = "completed" | "empty" | "unpaid" | "partial";
 
@@ -31,14 +31,14 @@ const invoiceStatusConfig: Record<
     borderColor: "rgba(107, 114, 128, 0.3)",
   },
   unpaid: {
-    label: "Chưa trả",
+    label: "Chưa hoàn tất",
     bg: "rgba(239, 68, 68, 0.2)",
     color: "#fca5a5",
     border: "rgba(239, 68, 68, 0.3)",
     borderColor: "rgba(239, 68, 68, 0.4)",
   },
   partial: {
-    label: "Trả một phần",
+    label: "Thanh toán một phần",
     bg: "rgba(245, 158, 11, 0.2)",
     color: "#fbbf24",
     border: "rgba(245, 158, 11, 0.3)",
@@ -53,32 +53,39 @@ function formatInvoiceAmount(amount: number) {
 export default function ExpandableInvoiceItem({
   invoice,
   invoiceStatus,
-  onClick,
+  onEdit,
+  onDelete,
 }: {
   invoice: Doc<"invoices">;
   invoiceStatus: InvoiceStatus;
-  onClick: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<{
-    isOpen: boolean;
-    type: "invoice" | "order";
-    id: Id<"invoices"> | Id<"orderers">;
-    name: string;
-  }>({ isOpen: false, type: "invoice", id: "" as Id<"invoices">, name: "" });
+  const detailsId = useId();
 
-  const isAdjustment = invoice.store_name.startsWith("Điều chỉnh nợ");
-  const shouldFetchOrderers = expanded || isAdjustment;
+  const isPayable = invoice.invoice_type === "payable";
 
   const orderers = useQuery(
     api.features.orders.queries.getByInvoice,
-    shouldFetchOrderers ? { invoice_id: invoice._id } : "skip",
+    expanded ? { invoice_id: invoice._id } : "skip",
   );
   const togglePaid = useMutation(api.features.orders.mutations.togglePaid);
-  const deleteOrder = useMutation(api.features.orders.mutations.deleteOrder);
-  const deleteInvoice = useMutation(api.features.invoices.mutations.deleteInvoice);
 
   const statusStyle = invoiceStatusConfig[invoiceStatus];
+
+  const handleTogglePaid = async (order: NonNullable<typeof orderers>[number]) => {
+    try {
+      await togglePaid({ id: order._id, is_paid: true });
+      toast.success(
+        `${isPayable ? "Đã đánh dấu đã trả" : "Đã đánh dấu đã thu"} của ${order.user_name}.`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể cập nhật trạng thái thanh toán.");
+    }
+  };
+
+  const canModify = invoiceStatus !== "completed" && invoiceStatus !== "partial";
 
   return (
     <li
@@ -100,15 +107,12 @@ export default function ExpandableInvoiceItem({
           width: "100%",
         }}
       >
-        <div
-          onClick={() => setExpanded(!expanded)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            cursor: "pointer",
-            flex: 1,
-          }}
+        <button
+          type="button"
+          className="invoice-expand-trigger"
+          aria-expanded={expanded}
+          aria-controls={detailsId}
+          onClick={() => setExpanded((value) => !value)}
         >
           <span
             style={{
@@ -131,126 +135,70 @@ export default function ExpandableInvoiceItem({
             >
               {invoice.store_name}
             </strong>
-            {!isAdjustment && (
-              <span
-                style={{
-                  background: statusStyle.bg,
-                  color: statusStyle.color,
-                  padding: "2px 8px",
-                  borderRadius: "12px",
-                  fontSize: "0.75rem",
-                  fontWeight: "600",
-                  border: `1px solid ${statusStyle.border}`,
-                }}
-              >
-                {statusStyle.label}
-              </span>
-            )}
-            {isAdjustment && (
-              <span
-                style={{
-                  background: "rgba(245, 158, 11, 0.2)",
-                  color: "#fbbf24",
-                  padding: "2px 8px",
-                  borderRadius: "12px",
-                  fontSize: "0.75rem",
-                  fontWeight: "600",
-                  border: "1px solid rgba(245, 158, 11, 0.3)",
-                }}
-              >
-                Điều chỉnh
-              </span>
-            )}
-            <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-              (
+            <span
+              style={{
+                background: isPayable
+                  ? "rgba(245, 158, 11, 0.16)"
+                  : "rgba(139, 92, 246, 0.16)",
+                color: isPayable ? "#fbbf24" : "#c4a2ff",
+                padding: "2px 8px",
+                borderRadius: "12px",
+                fontSize: "0.75rem",
+                fontWeight: "600",
+                border: `1px solid ${isPayable ? "rgba(245, 158, 11, 0.3)" : "rgba(139, 92, 246, 0.3)"}`,
+              }}
+            >
+              {isPayable ? "Phải trả" : "Phải thu"}
+            </span>
+            <span
+              style={{
+                background: statusStyle.bg,
+                color: statusStyle.color,
+                padding: "2px 8px",
+                borderRadius: "12px",
+                fontSize: "0.75rem",
+                fontWeight: "600",
+                border: `1px solid ${statusStyle.border}`,
+              }}
+            >
+              {statusStyle.label}
+            </span>
+            <span className="invoice-card-date">
               {invoice.date
                 ? invoice.date.split("-").reverse().join("/")
                 : new Date(invoice._creationTime).toLocaleDateString("vi-VN")}
-              )
             </span>
           </div>
-        </div>
+        </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div
-            className="price-tag"
-            onClick={onClick}
-            style={{
-              cursor: "pointer",
-              padding: "4px 8px",
-              borderRadius: "6px",
-              transition: "background 0.2s",
-              color: isAdjustment ? "#fbbf24" : "#f472b6",
-              fontWeight: "600",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.background = "rgba(255,255,255,0.05)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.background = "transparent")
-            }
-          >
-            {isAdjustment
-              ? `Trừ: ${formatInvoiceAmount(
-                  Math.abs(
-                    orderers?.reduce((sum, o) => sum + o.item_price, 0) ?? 0,
-                  ),
-                )}đ`
-              : `Tổng tiền: ${formatInvoiceAmount(invoice.paid_amount)}đ`} {" "}
-            ✏️
-          </div>
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirmDelete({
-                isOpen: true,
-                type: "invoice",
-                id: invoice._id,
-                name: invoice.store_name,
-              });
-            }}
-            title="Xóa hóa đơn"
-            style={{
-              color: "#ef4444",
-              background: "rgba(239, 68, 68, 0.1)",
-              border: "none",
-              padding: "6px 8px",
-              borderRadius: "6px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)")
-            }
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+        <div className="invoice-card-actions">
+          <strong className={`invoice-card-total${isPayable ? " payable" : ""}`}>
+            {isPayable
+              ? `Bạn phải trả: ${formatInvoiceAmount(invoice.paid_amount)}đ`
+              : `Tổng tiền: ${formatInvoiceAmount(invoice.paid_amount)}đ`}
+          </strong>
+          {canModify ? (
+            <button type="button" className="invoice-edit-icon-button" onClick={onEdit} aria-label={`Chỉnh sửa hóa đơn ${invoice.store_name}`} title="Chỉnh sửa hóa đơn">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12.8 3.2 4 4M3 17l3.8-.8L16 7a2.1 2.1 0 0 0-3-3L3.8 13.2 3 17Z" /></svg>
+            </button>
+          ) : null}
+          {canModify ? (
+            <button
+              type="button"
+              className="invoice-delete-button"
+              onClick={onDelete}
+              aria-label={`Xóa hóa đơn ${invoice.store_name}`}
+              title="Xóa hóa đơn chưa hoàn tất"
             >
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              <line x1="10" y1="11" x2="10" y2="17"></line>
-              <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
-          </button>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5h14M7.5 5.5V3h5v2.5m-7.5 0 .8 11h8.4l.8-11M8 8.5v5m4-5v5" /></svg>
+            </button>
+          ) : null}
         </div>
       </div>
 
       {expanded && (
         <div
+          id={detailsId}
           className="invoice-details-table-container"
           style={{ marginTop: "16px", animation: "fadeIn 0.3s ease-out" }}
         >
@@ -273,170 +221,62 @@ export default function ExpandableInvoiceItem({
               <thead>
                 <tr>
                   <th style={{ textAlign: "left", paddingLeft: "1.5rem" }}>
-                    Thành viên
+                    {isPayable ? "Chủ nợ" : "Thành viên"}
                   </th>
-                  <th style={{ textAlign: "center" }}>Phần ăn</th>
-                  <th style={{ textAlign: "center" }}>Tỉ lệ (%)</th>
-                  <th style={{ textAlign: "center" }}>Phải trả</th>
+                  <th style={{ textAlign: "center" }}>
+                    {isPayable ? "Khoản phải trả" : "Phần ăn"}
+                  </th>
+                  <th style={{ textAlign: "center" }}>
+                    {isPayable ? "Số tiền trả" : "Số tiền phải thu"}
+                  </th>
                   <th style={{ textAlign: "center" }}>Trạng thái</th>
-                  <th style={{ textAlign: "center" }}>Hành động</th>
                 </tr>
               </thead>
               <tbody>
                 {orderers.map((order) => (
                   <tr key={order._id}>
-                    <td style={{ textAlign: "left", paddingLeft: "1.5rem" }}>
+                    <td
+                      data-label={isPayable ? "Chủ nợ" : "Thành viên"}
+                      style={{ textAlign: "left", paddingLeft: "1.5rem" }}
+                    >
                       <strong
                         style={{ color: "var(--text-main)", fontSize: "1rem" }}
                       >
                         {order.user_name}
                       </strong>
                     </td>
-                    <td style={{ textAlign: "center" }}>
-                      {formatInvoiceAmount(order.item_price)}đ
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {order.percentage.toFixed(2)}%
+                    <td
+                      className="invoice-breakdown-cell"
+                      data-label={isPayable ? "Khoản phải trả" : "Phần ăn"}
+                    >
+                      {isPayable
+                        ? "—"
+                        : `${formatInvoiceAmount(order.item_price)}đ`}
                     </td>
                     <td
-                      style={{
-                        color: "#f472b6",
-                        fontWeight: "600",
-                        textAlign: "center",
-                      }}
+                      className="invoice-breakdown-cell"
+                      data-label={isPayable ? "Số tiền trả" : "Số tiền phải thu"}
                     >
-                      {formatInvoiceAmount(order.actual_price)}đ
+                      <strong>{formatInvoiceAmount(order.actual_price)}đ</strong>
                     </td>
-                    <td style={{ textAlign: "center" }}>
+                    <td data-label="Trạng thái" style={{ textAlign: "center" }}>
                       {order.is_paid ? (
-                        <span
-                          style={{
-                            display: "inline-block",
-                            background: "rgba(16, 185, 129, 0.2)",
-                            color: "#6ee7b7",
-                            padding: "6px 12px",
-                            borderRadius: "8px",
-                            fontSize: "0.85rem",
-                            fontWeight: "500",
-                          }}
-                        >
-                          Đã gửi
+                        <span className="invoice-payment-status paid">
+                          <span aria-hidden="true">✓</span>
+                          {isPayable ? "Đã trả" : "Đã thu"}
                         </span>
                       ) : (
-                        <span
-                          style={{
-                            display: "inline-block",
-                            background: "rgba(239, 68, 68, 0.15)",
-                            color: "#fca5a5",
-                            padding: "6px 12px",
-                            borderRadius: "8px",
-                            fontSize: "0.85rem",
-                            fontWeight: "500",
-                          }}
+                        <button
+                          type="button"
+                          className="invoice-payment-action invoice-payment-icon-action"
+                          onClick={() => void handleTogglePaid(order)}
+                          aria-label={`Đánh dấu đã ${isPayable ? "trả" : "thu"} cho ${order.user_name}`}
+                          title={`Đánh dấu đã ${isPayable ? "trả" : "thu"}`}
                         >
-                          Chưa gửi
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {!order.is_paid ? (
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <button
-                            onClick={() =>
-                              togglePaid({ id: order._id, is_paid: true })
-                            }
-                            title="Đánh dấu đã trả"
-                            style={{
-                              background: "var(--accent)",
-                              border: "none",
-                              color: "white",
-                              padding: "8px",
-                              borderRadius: "8px",
-                              cursor: "pointer",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              transition: "all 0.2s",
-                            }}
-                            onMouseEnter={(e) =>
-                              (e.currentTarget.style.background =
-                                "var(--accent-hover)")
-                            }
-                            onMouseLeave={(e) =>
-                              (e.currentTarget.style.background =
-                                "var(--accent)")
-                            }
-                          >
-                            <svg
-                              width="20"
-                              height="20"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <polyline points="20 6 9 17 4 12"></polyline>
-                            </svg>
-                          </button>
-
-                          <button
-                            className="delete-btn"
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Bạn có chắc muốn xóa phần ăn của ${order.user_name} không?`,
-                                )
-                              ) {
-                                deleteOrder({ id: order._id });
-                              }
-                            }}
-                            title="Xóa phần ăn"
-                            style={{ color: "#ef4444", padding: "4px" }}
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      ) : (
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            justifyContent: "center",
-                            alignItems: "center",
-                          }}
-                        >
-                          <span
-                            style={{
-                              color: "var(--text-muted)",
-                              fontSize: "0.9rem",
-                            }}
-                          >
-                            -
-                          </span>
-                          <button
-                            className="delete-btn"
-                            onClick={() => {
-                              setConfirmDelete({
-                                isOpen: true,
-                                type: "order",
-                                id: order._id,
-                                name: order.user_name,
-                              });
-                            }}
-                            title="Xóa phần ăn"
-                            style={{ color: "#ef4444", padding: "4px" }}
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                          <svg viewBox="0 0 20 20" aria-hidden="true">
+                            <path d="m4 10 4 4 8-8" />
+                          </svg>
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -447,28 +287,6 @@ export default function ExpandableInvoiceItem({
         </div>
       )}
 
-      {confirmDelete.isOpen && (
-        <ConfirmDialog
-          title="Xác nhận xóa"
-          message={
-            confirmDelete.type === "invoice"
-              ? `Bạn có chắc muốn xóa hóa đơn của ${confirmDelete.name} không? Toàn bộ phần ăn bên trong cũng sẽ bị xóa!`
-              : `Bạn có chắc muốn xóa phần ăn của ${confirmDelete.name} không?`
-          }
-          confirmLabel="Xóa"
-          onCancel={() =>
-            setConfirmDelete((prev) => ({ ...prev, isOpen: false }))
-          }
-          onConfirm={async () => {
-            if (confirmDelete.type === "invoice") {
-              await deleteInvoice({ id: confirmDelete.id as Id<"invoices"> });
-            } else {
-              await deleteOrder({ id: confirmDelete.id as Id<"orderers"> });
-            }
-            setConfirmDelete((prev) => ({ ...prev, isOpen: false }));
-          }}
-        />
-      )}
     </li>
   );
 }

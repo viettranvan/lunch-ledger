@@ -10,11 +10,11 @@
 
 import type * as features_debts_helpers from "../features/debts/helpers.js";
 import type * as features_debts_internal from "../features/debts/internal.js";
-import type * as features_debts_mutations from "../features/debts/mutations.js";
 import type * as features_debts_queries from "../features/debts/queries.js";
 import type * as features_invoices_helpers from "../features/invoices/helpers.js";
 import type * as features_invoices_mutations from "../features/invoices/mutations.js";
 import type * as features_invoices_queries from "../features/invoices/queries.js";
+import type * as features_orders_allocation from "../features/orders/allocation.js";
 import type * as features_orders_helpers from "../features/orders/helpers.js";
 import type * as features_orders_mutations from "../features/orders/mutations.js";
 import type * as features_orders_queries from "../features/orders/queries.js";
@@ -34,11 +34,11 @@ import type {
 declare const fullApi: ApiFromModules<{
   "features/debts/helpers": typeof features_debts_helpers;
   "features/debts/internal": typeof features_debts_internal;
-  "features/debts/mutations": typeof features_debts_mutations;
   "features/debts/queries": typeof features_debts_queries;
   "features/invoices/helpers": typeof features_invoices_helpers;
   "features/invoices/mutations": typeof features_invoices_mutations;
   "features/invoices/queries": typeof features_invoices_queries;
+  "features/orders/allocation": typeof features_orders_allocation;
   "features/orders/helpers": typeof features_orders_helpers;
   "features/orders/mutations": typeof features_orders_mutations;
   "features/orders/queries": typeof features_orders_queries;

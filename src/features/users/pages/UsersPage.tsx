@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
+import { toast } from "../../../shared/lib/toast";
 
 function EditIcon() {
   return (
@@ -29,6 +30,13 @@ function UserRow({ user }: { user: Doc<"users"> }) {
         teams_email: email.trim() || undefined,
       });
       setEditingEmail(false);
+      toast.success(
+        email.trim()
+          ? `Đã cập nhật email Teams của ${user.name}.`
+          : `Đã xóa email Teams của ${user.name}.`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể cập nhật email Teams.");
     } finally {
       setIsSaving(false);
     }
@@ -41,6 +49,13 @@ function UserRow({ user }: { user: Doc<"users"> }) {
         id: user._id as Id<"users">,
         is_active: !user.is_active,
       });
+      toast.success(
+        user.is_active
+          ? `Đã ngưng hoạt động thành viên ${user.name}.`
+          : `Đã kích hoạt thành viên ${user.name}.`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể cập nhật trạng thái thành viên.");
     } finally {
       setIsSaving(false);
     }
@@ -152,6 +167,9 @@ export default function UsersPage() {
       });
       setName("");
       setEmail("");
+      toast.success(`Đã thêm thành viên ${trimmedName}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể thêm thành viên.");
     } finally {
       setIsCreating(false);
     }

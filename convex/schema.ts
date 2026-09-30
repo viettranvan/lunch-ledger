@@ -26,6 +26,10 @@ export default defineSchema({
   invoices: defineTable({
     store_name: v.string(),
     paid_amount: v.number(),
+    // Missing on legacy invoices; readers treat those as receivables.
+    invoice_type: v.optional(
+      v.union(v.literal("receivable"), v.literal("payable")),
+    ),
     updated_at: v.optional(v.number()),
     date: v.optional(v.string()),
     sort_time: v.optional(v.number()),

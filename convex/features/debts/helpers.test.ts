@@ -10,9 +10,9 @@ function makeUser(
   id: string,
   name: string,
   teams_email?: string,
-): Doc<"users"> {
+): Doc<"members"> {
   return {
-    _id: id as Id<"users">,
+    _id: id as Id<"members">,
     _creationTime: 0,
     name,
     is_active: true,
@@ -26,7 +26,7 @@ function makeOrder(
   invoice_type: "receivable" | "payable" = "receivable",
 ): DebtLedgerOrder {
   return {
-    user_id: userId as Id<"users">,
+    member_id: userId as Id<"members">,
     actual_price: actualPrice,
     invoice_type,
   };
@@ -53,7 +53,7 @@ describe("aggregateUserDebts", () => {
 
     expect(debts).toEqual([
       {
-        user_id: "u1",
+        member_id: "u1",
         name: "An",
         teams_email: "an@example.com",
         totalDebt: 30_000,
@@ -64,7 +64,7 @@ describe("aggregateUserDebts", () => {
         payableTotal: 20_000,
       },
       {
-        user_id: "u2",
+        member_id: "u2",
         name: "Bình",
         teams_email: null,
         totalDebt: 10_000,
@@ -75,7 +75,7 @@ describe("aggregateUserDebts", () => {
         payableTotal: 0,
       },
       {
-        user_id: "u3",
+        member_id: "u3",
         name: "Chi",
         teams_email: null,
         totalDebt: -40_000,

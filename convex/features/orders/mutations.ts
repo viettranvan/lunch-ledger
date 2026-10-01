@@ -2,14 +2,16 @@ import { v } from "convex/values";
 import { mutation } from "../../_generated/server";
 import { syncInvoiceStatus } from "../invoices/helpers";
 import { recalculateInvoiceOrders } from "./helpers";
+import { requireEditor } from "../../authz";
 
 export const create = mutation({
   args: {
-    user_id: v.id("users"),
+    member_id: v.id("members"),
     invoice_id: v.id("invoices"),
     item_price: v.number(),
   },
   handler: async (ctx, args) => {
+    await requireEditor(ctx);
     const invoice = await ctx.db.get(args.invoice_id);
     if (!invoice) throw new Error("Không tìm thấy hóa đơn.");
     if (invoice.invoice_type === "payable") {
@@ -23,7 +25,7 @@ export const create = mutation({
     }
 
     const id = await ctx.db.insert("orderers", {
-      user_id: args.user_id,
+      member_id: args.member_id,
       invoice_id: args.invoice_id,
       actual_price: args.item_price,
       item_price: args.item_price,
@@ -40,6 +42,7 @@ export const create = mutation({
 export const togglePaid = mutation({
   args: { id: v.id("orderers"), is_paid: v.boolean() },
   handler: async (ctx, args) => {
+    await requireEditor(ctx);
     const order = await ctx.db.get(args.id);
     if (!order) return;
 
@@ -54,14 +57,15 @@ export const togglePaid = mutation({
 
 export const settleUserBalance = mutation({
   args: {
-    user_id: v.id("users"),
+    member_id: v.id("members"),
     expected_net_amount: v.number(),
   },
   handler: async (ctx, args) => {
+    await requireEditor(ctx);
     const unpaidOrders = await ctx.db
       .query("orderers")
-      .withIndex("by_user_paid", (q) =>
-        q.eq("user_id", args.user_id).eq("is_paid", false),
+      .withIndex("by_member_paid", (q) =>
+        q.eq("member_id", args.member_id).eq("is_paid", false),
       )
       .collect();
 
@@ -104,6 +108,7 @@ export const update = mutation({
     item_price: v.number(),
   },
   handler: async (ctx, args) => {
+    await requireEditor(ctx);
     const order = await ctx.db.get(args.id);
     if (!order) return;
 
@@ -119,6 +124,7 @@ export const update = mutation({
 export const deleteOrder = mutation({
   args: { id: v.id("orderers") },
   handler: async (ctx, args) => {
+    await requireEditor(ctx);
     const order = await ctx.db.get(args.id);
     if (!order) return;
 

@@ -9,6 +9,7 @@ import InvoiceForm from "./InvoiceForm";
 import InvoiceItem from "./InvoiceItem";
 
 export default function InvoiceList() {
+  const isEditor = useQuery(api.auth.isEditorQuery) === true;
   const [showAll, setShowAll] = useState(false);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<Id<"invoices"> | null>(null);
@@ -65,7 +66,7 @@ export default function InvoiceList() {
             />
             Hiện tất cả
           </label>
-          <button
+          {isEditor && <button
             type="button"
             className="invoice-create-toggle"
             onClick={() => {
@@ -74,11 +75,11 @@ export default function InvoiceList() {
             }}
           >
             + Tạo hóa đơn
-          </button>
+          </button>}
         </div>
       </div>
 
-      {isEditingOpen && editingInvoiceId ? (
+      {isEditor && isEditingOpen && editingInvoiceId ? (
         <Modal
           className="invoice-modal"
           ariaLabelledBy="invoice-form-title"
@@ -90,7 +91,12 @@ export default function InvoiceList() {
             <InvoiceForm
               key={editingInvoiceId}
               initialInvoice={editingInvoice}
-              initialOrders={editingOrders}
+              initialOrders={editingOrders
+                .filter((order) => order.member_id !== undefined)
+                .map((order) => ({
+                  member_id: order.member_id!,
+                  item_price: order.item_price,
+                }))}
               onCancel={closeEditor}
               onSaved={closeEditor}
             />
@@ -100,7 +106,7 @@ export default function InvoiceList() {
         </Modal>
       ) : null}
 
-      {isComposerOpen ? (
+      {isEditor && isComposerOpen ? (
         <Modal
           className="invoice-modal"
           ariaLabelledBy="invoice-form-title"
@@ -129,6 +135,7 @@ export default function InvoiceList() {
                 key={invoice._id}
                 invoice={invoice}
                 invoiceStatus={invoice.status ?? "empty"}
+                canEdit={isEditor}
                 onEdit={() => openEditor(invoice)}
                 onDelete={() => setInvoiceToDelete(invoice)}
               />
@@ -147,7 +154,7 @@ export default function InvoiceList() {
         </>
       )}
 
-      {invoiceToDelete ? (
+      {isEditor && invoiceToDelete ? (
         <ConfirmDialog
           title="Xóa hóa đơn chưa hoàn tất?"
           message={

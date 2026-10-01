@@ -7,16 +7,19 @@ import ConfirmDialog from "../../../shared/components/ConfirmDialog";
 import { toast } from "../../../shared/lib/toast";
 
 function formatDebtDetails(details: number[]) {
-  return details.reduce<string>((result, amount, index) => {
-    const display = (Math.abs(amount) / 1000).toLocaleString("vi-VN");
-    if (index === 0) return amount < 0 ? `−${display}` : display;
-    return `${result} ${amount < 0 ? "−" : "+"} ${display}`;
-  }, "");
+  return details
+    .map((amount, index) => {
+      const display = (Math.abs(amount) / 1000).toLocaleString("vi-VN");
+      if (index === 0) return amount < 0 ? `−${display}` : display;
+      return `${amount < 0 ? "−" : "+"} ${display}`;
+    })
+    .join(" ");
 }
 
 export default function DebtOverview() {
+  const isEditor = useQuery(api.auth.isEditorQuery) === true;
   const debts = useQuery(api.features.debts.queries.getDebtOverview);
-  const teamsConfig = useQuery(api.features.teams.queries.get);
+  const teamsConfig = useQuery(api.features.teams.queries.get, isEditor ? {} : "skip");
   const sendDebtReminder = useAction(
     api.integrations.teams.actions.sendDebtReminder,
   );
@@ -24,11 +27,11 @@ export default function DebtOverview() {
     api.features.orders.mutations.settleUserBalance,
   );
   const [sendingTeams, setSendingTeams] = useState(false);
-  const [settlingUserId, setSettlingUserId] = useState<Id<"users"> | null>(null);
+  const [settlingUserId, setSettlingUserId] = useState<Id<"members"> | null>(null);
   const [isSettling, setIsSettling] = useState(false);
   const [isTeamsPreviewOpen, setIsTeamsPreviewOpen] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<Id<"invoices"> | null>(null);
-  const [selectedDebtUserId, setSelectedDebtUserId] = useState<Id<"users"> | null>(null);
+  const [selectedDebtUserId, setSelectedDebtUserId] = useState<Id<"members"> | null>(null);
   const selectedInvoice = useQuery(
     api.features.invoices.queries.getById,
     selectedInvoiceId ? { id: selectedInvoiceId } : "skip",
@@ -38,7 +41,7 @@ export default function DebtOverview() {
     selectedInvoiceId ? { invoice_id: selectedInvoiceId } : "skip",
   );
   const debtToSettle = settlingUserId
-    ? debts?.find((debt) => debt.user_id === settlingUserId) ?? null
+    ? debts?.find((debt) => debt.member_id === settlingUserId) ?? null
     : null;
 
   const closeInvoiceModal = () => {
@@ -59,13 +62,15 @@ export default function DebtOverview() {
             "Không gửi được — chưa có Teams email nào. Thêm email ở mục Thành viên.",
           );
         }
-      } else {
-        let message = `Đã gửi nhắc nợ cho ${result.count} người vào Teams.`;
-        if (result.missingEmail?.length) {
-          message += ` (Bỏ qua: ${result.missingEmail.join(", ")})`;
-        }
-        toast.success(message);
+        return;
       }
+
+      const skippedMembers = result.missingEmail?.length
+        ? ` (Bỏ qua: ${result.missingEmail.join(", ")})`
+        : "";
+      toast.success(
+        `Đã gửi nhắc nợ cho ${result.count} người vào Teams.${skippedMembers}`,
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Gửi Teams thất bại.",
@@ -81,7 +86,7 @@ export default function DebtOverview() {
     setIsSettling(true);
     try {
       const result = await settleUserBalance({
-        user_id: debtToSettle.user_id,
+        member_id: debtToSettle.member_id,
         expected_net_amount: debtToSettle.totalDebt,
       });
       setSettlingUserId(null);
@@ -109,7 +114,7 @@ export default function DebtOverview() {
     <div className="debt-overview">
       <div className="debt-overview-heading">
         <h2>Tổng nợ</h2>
-        {receivables.length > 0 && (
+        {isEditor && receivables.length > 0 && (
           <button
             type="button"
             className="debt-send-teams"
@@ -133,7 +138,7 @@ export default function DebtOverview() {
                 <th className="debt-member-heading">Thành viên</th>
                 <th>Chi tiết ròng</th>
                 <th className="debt-net-heading">Số dư ròng</th>
-                <th className="debt-action-heading">Thao tác</th>
+                {isEditor && <th className="debt-action-heading">Thao tác</th>}
               </tr>
             </thead>
             <tbody>
@@ -143,7 +148,7 @@ export default function DebtOverview() {
                 );
 
                 return (
-                  <tr key={debt.user_id}>
+                  <tr key={debt.member_id}>
                     <td className="debt-member-cell" data-label="Thành viên">
                       <strong>{debt.name}</strong>
                     </td>
@@ -155,7 +160,7 @@ export default function DebtOverview() {
                             type="button"
                             className={`debt-entry ${entry.amount < 0 ? "payable" : "receivable"}`}
                             onClick={() => {
-                              setSelectedDebtUserId(debt.user_id);
+                              setSelectedDebtUserId(debt.member_id);
                               setSelectedInvoiceId(entry.invoice_id);
                             }}
                             aria-label={`Hóa đơn ${entry.store_name}, ngày ${entry.date}: ${entry.amount < 0 ? "phải trả" : "phải thu"} ${Math.abs(entry.amount).toLocaleString("vi-VN")} đồng`}
@@ -175,11 +180,11 @@ export default function DebtOverview() {
                     <td className={`debt-net-cell ${debt.direction}`} data-label="Số dư ròng">
                       <strong>{debt.absTotal.toLocaleString("vi-VN")}đ</strong>
                     </td>
-                    <td className="debt-action-cell" data-label="Thao tác">
+                    {isEditor && <td className="debt-action-cell" data-label="Thao tác">
                       <button
                         type="button"
                         className={`debt-settlement-icon-button ${debt.direction}`}
-                        onClick={() => setSettlingUserId(debt.user_id)}
+                        onClick={() => setSettlingUserId(debt.member_id)}
                         aria-label={`${debt.direction === "owed" ? "Xác nhận đã thu" : "Xác nhận đã trả"} ${debt.absTotal.toLocaleString("vi-VN")} đồng từ ${debt.name}`}
                         title={`${debt.direction === "owed" ? "Xác nhận đã thu" : "Xác nhận đã trả"} ${debt.absTotal.toLocaleString("vi-VN")}đ`}
                         disabled={isSettling}
@@ -188,7 +193,7 @@ export default function DebtOverview() {
                           <path d="m4 10 4 4 8-8" />
                         </svg>
                       </button>
-                    </td>
+                    </td>}
                   </tr>
                 );
               })}
@@ -197,7 +202,7 @@ export default function DebtOverview() {
         </div>
       )}
 
-      {debtToSettle && (
+      {isEditor && debtToSettle && (
         <ConfirmDialog
           title={`Đối soát với ${debtToSettle.name}`}
           message={
@@ -302,7 +307,7 @@ export default function DebtOverview() {
                           <tr
                             key={order._id}
                             className={
-                              order.user_id === selectedDebtUserId
+                              order.member_id === selectedDebtUserId
                                 ? "debt-invoice-member-highlight"
                                 : undefined
                             }
@@ -316,7 +321,7 @@ export default function DebtOverview() {
                               style={{ textAlign: "left" }}
                             >
                               {order.user_name}
-                              {order.user_id === selectedDebtUserId && (
+                              {order.member_id === selectedDebtUserId && (
                                 <span className="debt-invoice-member-current">
                                   Đang xem
                                 </span>
@@ -367,7 +372,7 @@ export default function DebtOverview() {
         </Modal>
       )}
 
-      {isTeamsPreviewOpen && (
+      {isEditor && isTeamsPreviewOpen && (
         <Modal
           className="teams-preview-modal"
           onClose={() => setIsTeamsPreviewOpen(false)}
@@ -401,7 +406,7 @@ export default function DebtOverview() {
               </p>
               <div className="teams-preview-list">
                 {sendableDebts.map((debt) => (
-                  <div className="teams-preview-debt" key={debt.user_id}>
+                  <div className="teams-preview-debt" key={debt.member_id}>
                     <div className="teams-preview-debt-heading">
                       <div className="teams-preview-debt-person">
                         <strong>{debt.name}</strong>

@@ -13,7 +13,7 @@ function EditIcon() {
   );
 }
 
-function UserRow({ user }: { user: Doc<"users"> }) {
+function UserRow({ user }: { user: Doc<"members"> }) {
   const updateTeamsEmail = useMutation(
     api.features.users.mutations.updateTeamsEmail,
   );
@@ -26,7 +26,7 @@ function UserRow({ user }: { user: Doc<"users"> }) {
     setIsSaving(true);
     try {
       await updateTeamsEmail({
-        id: user._id as Id<"users">,
+        id: user._id as Id<"members">,
         teams_email: email.trim() || undefined,
       });
       setEditingEmail(false);
@@ -46,7 +46,7 @@ function UserRow({ user }: { user: Doc<"users"> }) {
     setIsSaving(true);
     try {
       await toggleActive({
-        id: user._id as Id<"users">,
+        id: user._id as Id<"members">,
         is_active: !user.is_active,
       });
       toast.success(

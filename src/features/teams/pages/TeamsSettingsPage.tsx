@@ -19,10 +19,10 @@ export default function TeamsSettingsPage() {
     if (storedConfig === undefined || storedConfig === null) return;
 
     setConfig({
-      teamId: storedConfig.team_id,
-      channelId: storedConfig.channel_id,
+      teamId: storedConfig.team_id ?? "",
+      channelId: storedConfig.channel_id ?? "",
       channelName: storedConfig.channel_name ?? "",
-      tenantId: storedConfig.tenant_id,
+      tenantId: storedConfig.tenant_id ?? "",
       qrImageUrl: storedConfig.qr_image_url ?? "",
     });
   }, [storedConfig]);

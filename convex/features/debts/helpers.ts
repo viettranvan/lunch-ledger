@@ -1,7 +1,7 @@
 import type { Doc, Id } from "../../_generated/dataModel";
 
 export type DebtOverviewItem = {
-  user_id: Id<"users">;
+  member_id: Id<"members">;
   name: string;
   teams_email: string | null;
   totalDebt: number;
@@ -14,7 +14,7 @@ export type DebtOverviewItem = {
 
 export type DebtLedgerOrder = Pick<
   Doc<"orderers">,
-  "user_id" | "actual_price"
+  "member_id" | "actual_price"
 > & { invoice_type?: "receivable" | "payable" };
 
 export type DebtPayloadItem = {
@@ -28,16 +28,19 @@ export type DebtPayloadItem = {
 };
 
 export function aggregateUserDebts(
-  users: Doc<"users">[],
+  users: Doc<"members">[],
   unpaidOrders: DebtLedgerOrder[],
 ): DebtOverviewItem[] {
   const ordersByUser = new Map<
-    Id<"users">,
+    Id<"members">,
     { details: number[]; receivableTotal: number; payableTotal: number }
   >();
 
   for (const order of unpaidOrders) {
-    const totals = ordersByUser.get(order.user_id) ?? {
+    const memberId = order.member_id;
+    if (!memberId) continue;
+
+    const totals = ordersByUser.get(memberId) ?? {
       details: [],
       receivableTotal: 0,
       payableTotal: 0,
@@ -47,7 +50,7 @@ export function aggregateUserDebts(
     totals.details.push(signedAmount);
     if (order.invoice_type === "payable") totals.payableTotal += amount;
     else totals.receivableTotal += order.actual_price;
-    ordersByUser.set(order.user_id, totals);
+    ordersByUser.set(memberId, totals);
   }
 
   return users
@@ -62,7 +65,7 @@ export function aggregateUserDebts(
         totalDebt > 0 ? "owed" : "owes_you";
 
       return {
-        user_id: user._id,
+        member_id: user._id,
         name: user.name,
         teams_email: user.teams_email ?? null,
         totalDebt,

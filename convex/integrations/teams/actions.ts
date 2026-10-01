@@ -1,7 +1,7 @@
 "use node";
 
 import { action } from "../../_generated/server";
-import { internal } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import type { DebtPayloadItem } from "../../features/debts/helpers";
 
 type SendDebtReminderResult =
@@ -15,13 +15,39 @@ function getWebhookUrl(): string | undefined {
   return env?.POWER_AUTOMATE_WEBHOOK_URL;
 }
 
+function getPublicAppUrl(): string | undefined {
+  const env = (globalThis as { process?: { env?: Record<string, string> } })
+    .process?.env;
+  const value = env?.PUBLIC_APP_URL?.trim();
+  if (!value) return undefined;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.hostname !== "localhost") {
+      return undefined;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
 export const sendDebtReminder = action({
   args: {},
   handler: async (ctx): Promise<SendDebtReminderResult> => {
+    if (!(await ctx.runQuery(api.auth.isEditorQuery, {}))) {
+      throw new Error("Bạn cần đăng nhập bằng tài khoản editor để gửi Teams.");
+    }
     const webhookUrl = getWebhookUrl();
     if (!webhookUrl) {
       throw new Error(
         "Chưa cấu hình POWER_AUTOMATE_WEBHOOK_URL trên Convex. Xem docs/POWER_AUTOMATE_SETUP.md",
+      );
+    }
+    const publicAppUrl = getPublicAppUrl();
+    if (!publicAppUrl) {
+      throw new Error(
+        "Chưa cấu hình PUBLIC_APP_URL hợp lệ trên Convex. Hãy đặt URL Lunch Ledger public trước khi gửi Teams.",
       );
     }
 
@@ -33,10 +59,10 @@ export const sendDebtReminder = action({
       throw new Error("Chưa cấu hình kênh Teams trong mục Configuration.");
     }
 
-    const teamId = teamsConfig.team_id.trim();
-    const channelId = teamsConfig.channel_id.trim();
+    const teamId = teamsConfig.team_id?.trim() ?? "";
+    const channelId = teamsConfig.channel_id?.trim() ?? "";
     const channelName = teamsConfig.channel_name?.trim() || undefined;
-    const tenantId = teamsConfig.tenant_id.trim();
+    const tenantId = teamsConfig.tenant_id?.trim() ?? "";
     const qrImageUrl = teamsConfig.qr_image_url?.trim() || undefined;
     if (!teamId || !channelId || !tenantId) {
       throw new Error("Thiếu Team ID, Channel ID hoặc Tenant ID của Teams.");
@@ -72,6 +98,7 @@ export const sendDebtReminder = action({
         channelName,
         tenantId,
         qrImageUrl,
+        appUrl: publicAppUrl,
         debts: withEmail.map((d) => ({
           name: d.name,
           email: d.email,

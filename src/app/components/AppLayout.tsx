@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useQuery } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { api } from "../../../convex/_generated/api";
 
 const navigationItems = [
   { label: "Dashboard", to: "/", icon: "◫", section: "overview" },
@@ -39,6 +42,12 @@ export default function AppLayout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const activeSection = getActiveSection(pathname);
   const pageMeta = pageMetaBySection[activeSection];
+  const access = useQuery(api.auth.getAccessStatus);
+  const { signOut } = useAuthActions();
+  const isEditor = access?.isEditor === true;
+  const visibleNavigationItems = isEditor
+    ? navigationItems
+    : navigationItems.filter((item) => item.section === "overview");
 
   return (
     <div className={`app-shell${isSidebarCollapsed ? " is-collapsed" : ""}`}>
@@ -71,7 +80,7 @@ export default function AppLayout() {
 
         <div className="app-sidebar-label">Không gian làm việc</div>
         <nav className="app-nav" aria-label="Điều hướng chính">
-          {navigationItems.map((item) => {
+          {visibleNavigationItems.map((item) => {
             const active = activeSection === item.section;
 
             return (
@@ -90,9 +99,46 @@ export default function AppLayout() {
           })}
         </nav>
 
-        <div className="app-sidebar-footer">
-          <span className="app-status-dot" aria-hidden="true" />
-          <span>Không gian cá nhân</span>
+        <div className="app-sidebar-account">
+          {access === undefined ? (
+            <div className="app-account-loading" role="status" aria-label="Đang tải trạng thái tài khoản">
+              <span className="app-status-dot" aria-hidden="true" />
+              <span className="app-account-label">Đang tải tài khoản…</span>
+            </div>
+          ) : isEditor ? (
+            <>
+              <div className="app-account-profile">
+                <span className="app-account-avatar" aria-hidden="true">
+                  {access.email?.trim().charAt(0).toUpperCase() || "E"}
+                </span>
+                <span className="app-account-identity">
+                  <strong>Editor</strong>
+                  <small title={access.email ?? undefined}>{access.email}</small>
+                </span>
+              </div>
+              <button
+                className="app-account-button"
+                type="button"
+                onClick={() => void signOut()}
+                aria-label="Đăng xuất"
+                title="Đăng xuất"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M10 17l5-5-5-5M15 12H3" />
+                  <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+                </svg>
+                <span className="app-account-label">Đăng xuất</span>
+              </button>
+            </>
+          ) : (
+            <NavLink className="app-account-button" to="/login" title="Đăng nhập">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 8l4 4-4 4M18 12H4" />
+                <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+              </svg>
+              <span className="app-account-label">Đăng nhập</span>
+            </NavLink>
+          )}
         </div>
       </aside>
 

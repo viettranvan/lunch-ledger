@@ -34,6 +34,7 @@ Paste vào **Request Body JSON Schema**:
     "channelName": { "type": "string" },
     "tenantId": { "type": "string" },
     "qrImageUrl": { "type": "string" },
+    "appUrl": { "type": "string" },
     "debts": {
       "type": "array",
       "items": {
@@ -50,7 +51,7 @@ Paste vào **Request Body JSON Schema**:
       }
     }
   },
-  "required": ["teamId", "channelId", "tenantId", "debts"]
+  "required": ["teamId", "channelId", "tenantId", "appUrl", "debts"]
 }
 ```
 
@@ -123,7 +124,7 @@ Sau vòng loop, thêm:
 - Post in: **Channel**
 - Team: chọn **Enter custom value**, sau đó chọn `teamId` từ dynamic content của HTTP trigger
 - Channel: chọn **Enter custom value**, sau đó chọn `channelId` từ dynamic content của HTTP trigger
-- Adaptive Card: dán JSON sau. Trong JSON, `MessageBody` và `qrImageUrl` được đọc động từ flow:
+- Adaptive Card: dán JSON sau. Trong JSON, `MessageBody`, `qrImageUrl` và `appUrl` được đọc động từ flow:
 
 ```json
 {
@@ -179,12 +180,22 @@ Sau vòng loop, thêm:
           "targetElements": ["qrPreview", "qrCollapse"]
         }
       ]
+    },
+    {
+      "type": "ActionSet",
+      "actions": [
+        {
+          "type": "Action.OpenUrl",
+          "title": "Mở Lunch Ledger",
+          "url": "@{triggerBody()?['appUrl']}"
+        }
+      ]
     }
   ]
 }
 ```
 
-Nếu Power Automate không xử lý expression trong JSON, đặt con trỏ vào giá trị `text` và `url`, sau đó bấm `/` hoặc lightning bolt để chèn lần lượt `MessageBody` và `qrImageUrl` từ dynamic content.
+Nếu Power Automate không xử lý expression trong JSON, đặt con trỏ vào giá trị `text` và `url`, sau đó bấm `/` hoặc lightning bolt để chèn lần lượt `MessageBody`, `qrImageUrl` và `appUrl` từ dynamic content.
 
 ---
 
@@ -193,10 +204,11 @@ Nếu Power Automate không xử lý expression trong JSON, đặt con trỏ và
 Set environment variable trên Convex Dashboard:
 
 ```bash
-npx convex env set POWER_AUTOMATE_WEBHOOK_URL "https://prod-xx.southeastasia.logic.azure.com/workflows/..."
+npx convex env set POWER_AUTOMATE_WEBHOOK_URL "https://prod-xx.southeastasia.logic.azure.com/workflows/..." --prod
+npx convex env set PUBLIC_APP_URL "https://lunch-ledger.vercel.app" --prod
 ```
 
-Hoặc trong Convex Dashboard → Settings → Environment Variables.
+Hoặc trong Convex Dashboard → **Production deployment** → Settings → Environment Variables. Với deployment dev, đặt `PUBLIC_APP_URL` thành URL dev nếu muốn thử link ở môi trường đó. Biến này thuộc Convex vì backend thêm URL vào payload gửi Power Automate.
 
 ---
 

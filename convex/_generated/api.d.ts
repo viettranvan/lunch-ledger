@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as auth from "../auth.js";
+import type * as authz from "../authz.js";
 import type * as features_debts_helpers from "../features/debts/helpers.js";
 import type * as features_debts_internal from "../features/debts/internal.js";
 import type * as features_debts_queries from "../features/debts/queries.js";
@@ -23,7 +25,9 @@ import type * as features_teams_mutations from "../features/teams/mutations.js";
 import type * as features_teams_queries from "../features/teams/queries.js";
 import type * as features_users_mutations from "../features/users/mutations.js";
 import type * as features_users_queries from "../features/users/queries.js";
+import type * as http from "../http.js";
 import type * as integrations_teams_actions from "../integrations/teams/actions.js";
+import type * as migrations from "../migrations.js";
 
 import type {
   ApiFromModules,
@@ -32,6 +36,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  auth: typeof auth;
+  authz: typeof authz;
   "features/debts/helpers": typeof features_debts_helpers;
   "features/debts/internal": typeof features_debts_internal;
   "features/debts/queries": typeof features_debts_queries;
@@ -47,7 +53,9 @@ declare const fullApi: ApiFromModules<{
   "features/teams/queries": typeof features_teams_queries;
   "features/users/mutations": typeof features_users_mutations;
   "features/users/queries": typeof features_users_queries;
+  http: typeof http;
   "integrations/teams/actions": typeof integrations_teams_actions;
+  migrations: typeof migrations;
 }>;
 
 /**
@@ -76,4 +84,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
+};

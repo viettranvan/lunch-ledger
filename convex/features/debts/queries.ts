@@ -1,12 +1,13 @@
 import { query } from "../../_generated/server";
 import { aggregateUserDebts } from "./helpers";
+import { isEditor } from "../../authz";
 
 export const getDebtOverview = query({
   args: {},
   handler: async (ctx) => {
     const [users, unpaidOrders] = await Promise.all([
       ctx.db
-        .query("users")
+        .query("members")
         .withIndex("by_active", (q) => q.eq("is_active", true))
         .collect(),
       ctx.db
@@ -32,7 +33,7 @@ export const getDebtOverview = query({
       ]),
     );
     const entriesByUser = new Map<
-      (typeof unpaidOrders)[number]["user_id"],
+      (typeof unpaidOrders)[number]["member_id"],
       {
         invoice_id: (typeof unpaidOrders)[number]["invoice_id"];
         store_name: string;
@@ -44,10 +45,10 @@ export const getDebtOverview = query({
 
     for (const order of unpaidOrders) {
       const invoice = invoicesById.get(order.invoice_id);
-      if (!invoice) continue;
+      if (!invoice || !order.member_id) continue;
 
       const invoiceType = invoice.invoice_type ?? "receivable";
-      const entries = entriesByUser.get(order.user_id) ?? [];
+      const entries = entriesByUser.get(order.member_id) ?? [];
       entries.push({
         invoice_id: invoice._id,
         store_name: invoice.store_name,
@@ -56,21 +57,23 @@ export const getDebtOverview = query({
         amount: invoiceType === "payable" ? -order.actual_price : order.actual_price,
         invoice_type: invoiceType,
       });
-      entriesByUser.set(order.user_id, entries);
+      entriesByUser.set(order.member_id, entries);
     }
 
     const debts = aggregateUserDebts(
       users,
       unpaidOrders.map((order) => ({
-        user_id: order.user_id,
+        member_id: order.member_id,
         actual_price: order.actual_price,
         invoice_type: invoiceTypes.get(order.invoice_id) ?? "receivable",
       })),
     );
 
+    const canSeeContactDetails = await isEditor(ctx);
     return debts.map((debt) => ({
       ...debt,
-      entries: entriesByUser.get(debt.user_id) ?? [],
+      teams_email: canSeeContactDetails ? debt.teams_email : null,
+      entries: entriesByUser.get(debt.member_id) ?? [],
     }));
   },
 });

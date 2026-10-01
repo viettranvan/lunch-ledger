@@ -12,7 +12,7 @@ export const getByInvoice = query({
 
     return await Promise.all(
       orders.map(async (order) => {
-        const user = await ctx.db.get(order.user_id);
+        const user = order.member_id ? await ctx.db.get(order.member_id) : null;
         return {
           ...order,
           user_name: user ? user.name : "Unknown User",

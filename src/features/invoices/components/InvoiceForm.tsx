@@ -66,7 +66,7 @@ type InvoiceFormProps = {
   onCancel: () => void;
   initialInvoice?: Doc<"invoices">;
   initialOrders?: Array<{
-    user_id: Id<"users">;
+    member_id: Id<"members">;
     item_price: number;
   }>;
 };
@@ -91,7 +91,7 @@ export default function InvoiceForm({
   const [date, setDate] = useState(initialInvoice?.date ?? todayForDateInput);
   const [memberSearch, setMemberSearch] = useState("");
   const [counterpartyId, setCounterpartyId] = useState(
-    initialInvoice?.invoice_type === "payable" ? initialOrders[0]?.user_id ?? "" : "",
+    initialInvoice?.invoice_type === "payable" ? initialOrders[0]?.member_id ?? "" : "",
   );
   const [counterpartySearch, setCounterpartySearch] = useState("");
   const [isCounterpartyMenuOpen, setIsCounterpartyMenuOpen] = useState(false);
@@ -103,7 +103,7 @@ export default function InvoiceForm({
   const [memberPrices, setMemberPrices] = useState<Record<string, string>>(() =>
     initialInvoice?.invoice_type !== "payable"
       ? Object.fromEntries(
-          initialOrders.map((order) => [order.user_id, String(order.item_price / 1000)]),
+          initialOrders.map((order) => [order.member_id, String(order.item_price / 1000)]),
         )
       : {},
   );
@@ -305,10 +305,10 @@ export default function InvoiceForm({
       const orders =
         invoiceType === "payable"
           ? selectedCounterparty
-            ? [{ user_id: selectedCounterparty._id, item_price: amountInVnd }]
+            ? [{ member_id: selectedCounterparty._id, item_price: amountInVnd }]
             : []
           : pricedUsers.map(({ user, itemPrice }) => ({
-              user_id: user._id,
+              member_id: user._id,
               item_price: itemPrice,
             }));
 

@@ -55,11 +55,13 @@ export default function ExpandableInvoiceItem({
   invoiceStatus,
   onEdit,
   onDelete,
+  canEdit,
 }: {
   invoice: Doc<"invoices">;
   invoiceStatus: InvoiceStatus;
   onEdit: () => void;
   onDelete: () => void;
+  canEdit: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
@@ -114,20 +116,14 @@ export default function ExpandableInvoiceItem({
           aria-controls={detailsId}
           onClick={() => setExpanded((value) => !value)}
         >
-          <span
-            style={{
-              fontSize: "0.85rem",
-              color: "var(--text-muted)",
-              width: "16px",
-              textAlign: "center",
-              display: "inline-block",
-              transition: "transform 0.2s",
-            }}
-          >
-            {expanded ? "▼" : "▶"}
+          <span className="invoice-expand-chevron" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <path d="m7.5 4.5 5.5 5.5-5.5 5.5" />
+            </svg>
           </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span className="invoice-expand-copy">
             <strong
+              className="invoice-expand-name"
               style={{
                 fontSize: expanded ? "1.1rem" : "1.05rem",
                 color: "white",
@@ -168,7 +164,7 @@ export default function ExpandableInvoiceItem({
                 ? invoice.date.split("-").reverse().join("/")
                 : new Date(invoice._creationTime).toLocaleDateString("vi-VN")}
             </span>
-          </div>
+          </span>
         </button>
 
         <div className="invoice-card-actions">
@@ -177,12 +173,12 @@ export default function ExpandableInvoiceItem({
               ? `Bạn phải trả: ${formatInvoiceAmount(invoice.paid_amount)}đ`
               : `Tổng tiền: ${formatInvoiceAmount(invoice.paid_amount)}đ`}
           </strong>
-          {canModify ? (
+          {canEdit && canModify ? (
             <button type="button" className="invoice-edit-icon-button" onClick={onEdit} aria-label={`Chỉnh sửa hóa đơn ${invoice.store_name}`} title="Chỉnh sửa hóa đơn">
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12.8 3.2 4 4M3 17l3.8-.8L16 7a2.1 2.1 0 0 0-3-3L3.8 13.2 3 17Z" /></svg>
             </button>
           ) : null}
-          {canModify ? (
+          {canEdit && canModify ? (
             <button
               type="button"
               className="invoice-delete-button"
@@ -265,7 +261,7 @@ export default function ExpandableInvoiceItem({
                           <span aria-hidden="true">✓</span>
                           {isPayable ? "Đã trả" : "Đã thu"}
                         </span>
-                      ) : (
+                      ) : canEdit ? (
                         <button
                           type="button"
                           className="invoice-payment-action invoice-payment-icon-action"
@@ -277,6 +273,8 @@ export default function ExpandableInvoiceItem({
                             <path d="m4 10 4 4 8-8" />
                           </svg>
                         </button>
+                      ) : (
+                        <span className="invoice-payment-status unpaid">{isPayable ? "Chưa trả" : "Chưa thu"}</span>
                       )}
                     </td>
                   </tr>

@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { mutation } from "../../_generated/server";
+import { requireEditor } from "../../authz";
 
+const integration = "teams";
 const settingsKey = "default";
 
 export const save = mutation({
@@ -12,6 +14,7 @@ export const save = mutation({
     qr_image_url: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireEditor(ctx);
     const teamId = args.team_id.trim();
     const channelId = args.channel_id.trim();
     const channelName = args.channel_name?.trim() || undefined;
@@ -26,10 +29,13 @@ export const save = mutation({
     }
 
     const existing = await ctx.db
-      .query("teams_settings")
-      .withIndex("by_key", (q) => q.eq("key", settingsKey))
+      .query("app_settings")
+      .withIndex("by_integration_key", (q) =>
+        q.eq("integration", integration).eq("key", settingsKey),
+      )
       .first();
     const values = {
+      integration,
       key: settingsKey,
       team_id: teamId,
       channel_id: channelId,
@@ -44,6 +50,6 @@ export const save = mutation({
       return existing._id;
     }
 
-    return await ctx.db.insert("teams_settings", values);
+    return await ctx.db.insert("app_settings", values);
   },
 });

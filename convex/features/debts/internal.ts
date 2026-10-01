@@ -9,7 +9,7 @@ export const getDebtPayload = internalQuery({
   handler: async (ctx): Promise<DebtPayloadItem[]> => {
     const [users, unpaidOrders] = await Promise.all([
       ctx.db
-        .query("users")
+        .query("members")
         .withIndex("by_active", (q) => q.eq("is_active", true))
         .collect(),
       ctx.db

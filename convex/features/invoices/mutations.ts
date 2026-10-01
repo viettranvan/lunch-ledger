@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation } from "../../_generated/server";
+import { requireEditor } from "../../authz";
 import { allocateProportionally } from "../orders/allocation";
 import { getSortTime, syncInvoiceStatus } from "./helpers";
 
@@ -13,12 +14,13 @@ export const create = mutation({
     date: v.string(),
     orders: v.array(
       v.object({
-        user_id: v.id("users"),
+        member_id: v.id("members"),
         item_price: v.number(),
       }),
     ),
   },
   handler: async (ctx, args) => {
+    await requireEditor(ctx);
     const storeName = args.store_name.trim();
     if (!storeName) throw new Error("Vui lòng nhập tên quán hoặc nội dung hóa đơn.");
     if (!Number.isSafeInteger(args.paid_amount) || args.paid_amount <= 0) {
@@ -35,16 +37,16 @@ export const create = mutation({
 
     const userIds = new Set<string>();
     for (const order of args.orders) {
-      if (userIds.has(order.user_id)) {
+      if (userIds.has(order.member_id)) {
         throw new Error("Một thành viên không thể được thêm nhiều lần vào cùng hóa đơn.");
       }
-      userIds.add(order.user_id);
+      userIds.add(order.member_id);
 
       if (!Number.isFinite(order.item_price) || order.item_price <= 0) {
         throw new Error("Giá món của từng thành viên phải lớn hơn 0.");
       }
 
-      const user = await ctx.db.get(order.user_id);
+      const user = await ctx.db.get(order.member_id);
       if (!user || !user.is_active) {
         throw new Error("Danh sách có thành viên không còn hoạt động. Hãy tải lại trang.");
       }
@@ -72,7 +74,7 @@ export const create = mutation({
 
     for (const [index, order] of args.orders.entries()) {
       await ctx.db.insert("orderers", {
-        user_id: order.user_id,
+        member_id: order.member_id,
         invoice_id: invoiceId,
         actual_price: allocations[index].amount,
         item_price: order.item_price,
@@ -94,12 +96,13 @@ export const updateWithOrders = mutation({
     date: v.string(),
     orders: v.array(
       v.object({
-        user_id: v.id("users"),
+        member_id: v.id("members"),
         item_price: v.number(),
       }),
     ),
   },
   handler: async (ctx, args) => {
+    await requireEditor(ctx);
     const invoice = await ctx.db.get(args.id);
     if (!invoice) throw new Error("Không tìm thấy hóa đơn.");
 
@@ -129,20 +132,20 @@ export const updateWithOrders = mutation({
       throw new Error("Hóa đơn phải trả cần chọn đúng một người bạn nợ.");
     }
 
-    const existingUserIds = new Set(existingOrders.map((order) => order.user_id));
+    const existingMemberIds = new Set(existingOrders.map((order) => order.member_id));
     const requestedUserIds = new Set<string>();
     for (const order of args.orders) {
-      if (requestedUserIds.has(order.user_id)) {
+      if (requestedUserIds.has(order.member_id)) {
         throw new Error("Một thành viên không thể được thêm nhiều lần vào cùng hóa đơn.");
       }
-      requestedUserIds.add(order.user_id);
+      requestedUserIds.add(order.member_id);
 
       if (!Number.isFinite(order.item_price) || order.item_price <= 0) {
         throw new Error("Giá món của từng thành viên phải lớn hơn 0.");
       }
 
-      const user = await ctx.db.get(order.user_id);
-      if (!user || (!user.is_active && !existingUserIds.has(order.user_id))) {
+      const user = await ctx.db.get(order.member_id);
+      if (!user || (!user.is_active && !existingMemberIds.has(order.member_id))) {
         throw new Error("Danh sách có thành viên không còn hoạt động. Hãy tải lại trang.");
       }
     }
@@ -164,10 +167,10 @@ export const updateWithOrders = mutation({
     });
 
     const remainingOrders = new Map(
-      existingOrders.map((order) => [order.user_id, order]),
+      existingOrders.map((order) => [order.member_id, order]),
     );
     for (const [index, order] of args.orders.entries()) {
-      const current = remainingOrders.get(order.user_id);
+      const current = remainingOrders.get(order.member_id);
       const allocation = allocations[index];
       const values = {
         item_price: order.item_price,
@@ -178,10 +181,10 @@ export const updateWithOrders = mutation({
 
       if (current) {
         await ctx.db.patch(current._id, values);
-        remainingOrders.delete(order.user_id);
+        remainingOrders.delete(order.member_id);
       } else {
         await ctx.db.insert("orderers", {
-          user_id: order.user_id,
+          member_id: order.member_id,
           invoice_id: args.id,
           ...values,
           is_paid: false,
@@ -199,6 +202,7 @@ export const updateWithOrders = mutation({
 export const deleteInvoice = mutation({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
+    await requireEditor(ctx);
     const invoice = await ctx.db.get(args.id);
     if (!invoice) return;
 

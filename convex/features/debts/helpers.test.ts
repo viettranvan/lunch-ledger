@@ -3,6 +3,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import {
   aggregateUserDebts,
   toTeamsDebtPayload,
+  withInvoiceTypes,
   type DebtLedgerOrder,
 } from "./helpers";
 
@@ -29,6 +30,18 @@ function makeOrder(
     member_id: userId as Id<"members">,
     actual_price: actualPrice,
     invoice_type,
+  };
+}
+
+function makeInvoiceOrder(
+  userId: string,
+  actualPrice: number,
+  invoiceId: string,
+): Pick<Doc<"orderers">, "member_id" | "actual_price" | "invoice_id"> {
+  return {
+    member_id: userId as Id<"members">,
+    actual_price: actualPrice,
+    invoice_id: invoiceId as Id<"invoices">,
   };
 }
 
@@ -122,5 +135,49 @@ describe("aggregateUserDebts", () => {
         direction: "owed",
       },
     ]);
+  });
+
+  it("uses the linked invoice type when building the Teams net balance", () => {
+    const invoiceTypes = new Map<Id<"invoices">, "receivable" | "payable">([
+      ["r1" as Id<"invoices">, "receivable"],
+      ["r2" as Id<"invoices">, "receivable"],
+      ["r3" as Id<"invoices">, "receivable"],
+      ["p1" as Id<"invoices">, "payable"],
+      ["p2" as Id<"invoices">, "payable"],
+      ["p3" as Id<"invoices">, "payable"],
+    ]);
+    const orders = withInvoiceTypes(
+      [
+        makeInvoiceOrder("eric", 63_000, "r1"),
+        makeInvoiceOrder("eric", 37_362, "r2"),
+        makeInvoiceOrder("eric", 54_761, "r3"),
+        makeInvoiceOrder("eric", 50_000, "p1"),
+        makeInvoiceOrder("eric", 27_000, "p2"),
+        makeInvoiceOrder("payable-only", 100_000, "p3"),
+      ],
+      invoiceTypes,
+    );
+    const debts = aggregateUserDebts(
+      [
+        makeUser("eric", "Eric", "eric@example.com"),
+        makeUser("payable-only", "Payable only", "other@example.com"),
+      ],
+      orders,
+    );
+    const payload = toTeamsDebtPayload(debts);
+
+    expect(debts.find((debt) => debt.name === "Eric")).toMatchObject({
+      totalDebt: 78_123,
+      direction: "owed",
+      details: [63_000, 37_362, 54_761, -50_000, -27_000],
+    });
+    expect(payload).toHaveLength(1);
+    expect(payload[0]).toMatchObject({
+      name: "Eric",
+      amount: 78_123,
+      direction: "owed",
+    });
+    expect(payload[0].details).toContain("− 50");
+    expect(payload[0].details).toContain("− 27");
   });
 });

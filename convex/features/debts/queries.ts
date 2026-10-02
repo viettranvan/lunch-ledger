@@ -1,5 +1,5 @@
 import { query } from "../../_generated/server";
-import { aggregateUserDebts } from "./helpers";
+import { aggregateUserDebts, withInvoiceTypes } from "./helpers";
 import { isEditor } from "../../authz";
 
 export const getDebtOverview = query({
@@ -62,11 +62,7 @@ export const getDebtOverview = query({
 
     const debts = aggregateUserDebts(
       users,
-      unpaidOrders.map((order) => ({
-        member_id: order.member_id,
-        actual_price: order.actual_price,
-        invoice_type: invoiceTypes.get(order.invoice_id) ?? "receivable",
-      })),
+      withInvoiceTypes(unpaidOrders, invoiceTypes),
     );
 
     const canSeeContactDetails = await isEditor(ctx);

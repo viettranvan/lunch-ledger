@@ -11,6 +11,13 @@ Hướng dẫn tạo flow gửi message có **@mention thật** vào channel Tea
 | Channel name | Cơm Chưa |
 | Tenant ID | `a132a7f5-19fb-48f8-9ed0-5554d0f7652e` |
 
+| Tham số | Giá trị |
+|---------|---------|
+| Team ID | `14545eec-51d2-4898-97df-bba08d5937b7` |
+| Channel ID | `19:X-ecLJw03EqevcEF8U5dJdktA7ZffBRb33Nf6hGDm-E1@thread.tacv2` |
+| Channel name | test_power_automate |
+| Tenant ID | `a132a7f5-19fb-48f8-9ed0-5554d0f7652e` |
+
 ---
 
 ## Bước 1: Tạo Flow

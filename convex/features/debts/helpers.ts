@@ -12,10 +12,12 @@ export type DebtOverviewItem = {
   payableTotal: number;
 };
 
+type InvoiceType = NonNullable<Doc<"invoices">["invoice_type"]>;
+
 export type DebtLedgerOrder = Pick<
   Doc<"orderers">,
   "member_id" | "actual_price"
-> & { invoice_type?: "receivable" | "payable" };
+> & { invoice_type: InvoiceType };
 
 export type DebtPayloadItem = {
   name: string;
@@ -26,6 +28,17 @@ export type DebtPayloadItem = {
   line: string;
   direction: "owed";
 };
+
+export function withInvoiceTypes(
+  orders: Pick<Doc<"orderers">, "member_id" | "actual_price" | "invoice_id">[],
+  invoiceTypes: ReadonlyMap<Id<"invoices">, InvoiceType>,
+): DebtLedgerOrder[] {
+  return orders.map((order) => ({
+    member_id: order.member_id,
+    actual_price: order.actual_price,
+    invoice_type: invoiceTypes.get(order.invoice_id) ?? "receivable",
+  }));
+}
 
 export function aggregateUserDebts(
   users: Doc<"members">[],

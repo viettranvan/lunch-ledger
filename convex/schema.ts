@@ -48,6 +48,8 @@ export default defineSchema({
     channel_name: v.optional(v.string()),
     tenant_id: v.optional(v.string()),
     qr_image_url: v.optional(v.string()),
+    sharepoint_site_address: v.optional(v.string()),
+    sharepoint_folder_path: v.optional(v.string()),
     updated_at: v.number(),
   }).index("by_integration_key", ["integration", "key"]),
   invoices: defineTable({

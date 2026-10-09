@@ -2,6 +2,8 @@
 
 Hướng dẫn tạo flow gửi message có **@mention thật** vào channel Teams được chọn trong app.
 
+Flow đang dùng cần cập nhật schema và các action ở Bước 2 trước khi triển khai bản app này. Ảnh chi tiết tiền cơm được lưu vào SharePoint của Team và hiển thị trực tiếp trong Adaptive Card.
+
 ## Thông tin channel
 
 | Tham số | Giá trị |
@@ -41,7 +43,10 @@ Paste vào **Request Body JSON Schema**:
     "channelName": { "type": "string" },
     "tenantId": { "type": "string" },
     "qrImageUrl": { "type": "string" },
+    "sharePointSiteAddress": { "type": "string" },
+    "sharePointFolderPath": { "type": "string" },
     "appUrl": { "type": "string" },
+    "screenshotBase64": { "type": "string" },
     "debts": {
       "type": "array",
       "items": {
@@ -58,26 +63,27 @@ Paste vào **Request Body JSON Schema**:
       }
     }
   },
-  "required": ["teamId", "channelId", "tenantId", "appUrl", "debts"]
+  "required": ["teamId", "channelId", "tenantId", "sharePointSiteAddress", "sharePointFolderPath", "appUrl", "screenshotBase64", "debts"]
 }
 ```
 
 Copy **HTTP POST URL** — dùng cho Convex env var.
+Sau khi cập nhật schema, bấm **Save** để Power Automate nạp hai dynamic content mới trước khi sửa các action SharePoint.
 
 ---
 
-## Bước 2: Build message với mentions
+## Bước 2: Build mentions và lưu ảnh đối chiếu
 
 Thêm các action sau:
 
-### 2a. Initialize variable `MessageBody`
+### 2a. Initialize variable `MentionBody`
 
 - Action: **Initialize variable**
-- Name: `MessageBody`
+- Name: `MentionBody`
 - Type: String
-- Value: `🍔 Tiền Cơm:<br>`
+- Value: `🍔 Tiền cơm — chi tiết từng thành viên:<br>`
 
-> Chỉ một `<br>` sau dấu `:` — mỗi người sẽ xuống dòng ở bước Append.
+Mỗi mention sẽ xuống dòng ở bước Append.
 
 ### 2b. Apply to each (loop debts)
 
@@ -91,38 +97,48 @@ Thêm các action sau:
 - Action: **Get an @mention token for a user** (Microsoft Teams)
 - User: `email` từ item hiện tại (`items('Apply_to_each')?['email']`)
 
-#### Append to message
+#### Append mentions only
 
 - Action: **Append to string variable**
-- Name: `MessageBody`
-- Value (chọn dynamic content, **không gõ tay** tên field):
+- Name: `MentionBody`
+- Value: output **Get an @mention token for a user**, sau đó thêm `<br>`
 
 ```
-[mention token]: [line]<br>
+[mention token]<br>
 ```
 
-Dynamic content cần chọn:
-1. Output **Get an @mention token for a user**
-2. Gõ `: ` (dấu hai chấm + space)
-3. **line** (Current item) — đã gồm `35,5 + 33,844 = 99.455đ`
-4. Gõ `<br>`
+Chỉ thêm mention vào `MentionBody`. Ảnh PNG là phần đối chiếu tên và tiền, tránh để client mobile gắn sai một dòng số tiền với mention khác.
 
-> **Lưu ý:** Dùng **`line`** thay vì ghép `details` + `formatted_total` riêng. Nếu field không có trong trigger schema, Power Automate sẽ để trống sau dấu `=` (lỗi hay gặp).
+### 2c. Lưu ảnh vào SharePoint của Team
 
-Kết quả mỗi dòng:
-```
-@Ryuk: 35,5 + 33,844 + 30,111 = 99.455đ
-@Julia: 40,078 + 36,384 = 76.462đ
-```
+- Action: **SharePoint — Create file**
+- Site Address: chọn **Enter custom value**, rồi chọn `sharePointSiteAddress` từ dynamic content của HTTP trigger
+- Folder Path: chọn `sharePointFolderPath` từ dynamic content của HTTP trigger
+- File Name: bấm biểu tượng **fx** → tab **Expression**, nhập công thức, rồi chọn **Add/Update** để chèn expression (không gõ trực tiếp công thức như văn bản):
 
-Message hoàn chỉnh:
-```
-🍔 Tiền Cơm:
-@Ryuk — 35,5 + 33,844 + 30,111 = 99.455đ
-@Julia — 40,078 + 36,384 = 76.462đ
+```text
+concat('debt-details-', formatDateTime(utcNow(),'yyyyMMdd-HHmmss'), '-', guid(), '.png')
 ```
 
-### 2c. Post Adaptive Card
+- File Content: bấm **fx** → tab **Expression**, nhập công thức, rồi chọn **Add/Update**:
+
+```text
+base64ToBinary(triggerBody()?['screenshotBase64'])
+```
+
+Ảnh được lưu trong site của Team và kế thừa quyền của thư mục; không tạo anonymous/“Anyone” link.
+
+Kiểm tra file vừa tạo: tên phải thành dạng `debt-details-<timestamp>-<guid>.png` và nội dung phải mở thành ảnh PNG. Nếu tên file vẫn hiện nguyên `concat(...)` hoặc nội dung file là `base64ToBinary(...)`, công thức đang bị nhập như văn bản; mở lại **Create file** và chèn bằng tab **Expression**.
+
+### 2d. Lấy link ảnh
+
+- Action: **SharePoint — Get file properties**
+- Site Address: chọn **Enter custom value**, rồi chọn `sharePointSiteAddress` từ dynamic content của HTTP trigger
+- Library Name: chọn đúng thư viện tài liệu từ dropdown của connector. Tên trong dropdown có thể khác đoạn URL như `Shared Documents`; nếu không thấy thư viện, kiểm tra tiêu đề thư viện trong **Site contents** của site rồi chọn tên đó.
+- Id: `ItemId` từ bước **Create file**
+- Dùng dynamic content **Link to item** làm URL ảnh trong card; file gốc được mở đúng bằng link này.
+
+### 2e. Post Adaptive Card
 
 Sau vòng loop, thêm:
 
@@ -131,7 +147,7 @@ Sau vòng loop, thêm:
 - Post in: **Channel**
 - Team: chọn **Enter custom value**, sau đó chọn `teamId` từ dynamic content của HTTP trigger
 - Channel: chọn **Enter custom value**, sau đó chọn `channelId` từ dynamic content của HTTP trigger
-- Adaptive Card: dán JSON sau. Trong JSON, `MessageBody`, `qrImageUrl` và `appUrl` được đọc động từ flow:
+- Adaptive Card: dán JSON sau. Ảnh tiền cơm luôn hiển thị lớn bằng **Link to item** từ **Get file properties**. `MentionBody`, `qrImageUrl` và `appUrl` được đọc động từ flow:
 
 ```json
 {
@@ -149,8 +165,14 @@ Sau vòng loop, thêm:
     },
     {
       "type": "TextBlock",
-      "text": "@{variables('MessageBody')}",
+      "text": "@{variables('MentionBody')}",
       "wrap": true
+    },
+    {
+      "type": "Image",
+      "url": "@{outputs('Get_file_properties')?['body/{Link}']}",
+      "altText": "Chi tiết tiền cơm",
+      "size": "Stretch"
     },
     {
       "type": "Image",
@@ -192,8 +214,8 @@ Sau vòng loop, thêm:
       "type": "ActionSet",
       "actions": [
         {
-          "type": "Action.OpenUrl",
-          "title": "Mở Lunch Ledger",
+        "type": "Action.OpenUrl",
+        "title": "Xem Chi Tiết",
           "url": "@{triggerBody()?['appUrl']}"
         }
       ]
@@ -202,11 +224,37 @@ Sau vòng loop, thêm:
 }
 ```
 
-Nếu Power Automate không xử lý expression trong JSON, đặt con trỏ vào giá trị `text` và `url`, sau đó bấm `/` hoặc lightning bolt để chèn lần lượt `MessageBody`, `qrImageUrl` và `appUrl` từ dynamic content.
+Nếu Power Automate không xử lý expression trong JSON, đặt con trỏ vào các giá trị `text` và `url`, sau đó bấm `/` hoặc lightning bolt để chèn `MentionBody`, `Link to item`, `qrImageUrl` và `appUrl` từ dynamic content. Trong flow thực tế, dùng tên biến nội dung hiện có của bạn (ví dụ `MessageBody`) thay cho `MentionBody` nếu cần.
+
+### 2f. HTTP acknowledgement (tùy chọn)
+
+Flow không có action **Response** vẫn có thể gửi card; HTTP trigger trả `202 Accepted` khi nhận yêu cầu, còn các action tiếp tục chạy. App sẽ báo Flow đã nhận yêu cầu nhưng chưa xác nhận hoàn tất, nên cần kiểm tra **Run history** để xác nhận ảnh và card.
+
+Nếu muốn app nhận xác nhận hoàn tất, thêm action **Response** sau **Post card** và ngoài `Apply to each`:
+
+- Status Code: `200`
+- Body: có thể để trống.
+- **Asynchronous response** trong **Settings**: Off.
+
+Lưu ý: Microsoft đánh dấu **Response** là action thuộc HTTP Request/Response connector Premium ([tài liệu Microsoft](https://learn.microsoft.com/en-us/power-automate/create-child-flows)). Nếu chưa có quyền Premium, giữ Flow hiện tại; không cần thêm action này để gửi card.
 
 ---
 
-## Bước 3: Cấu hình Convex
+## Bước 3: Cấu hình app và Convex
+
+Trong Lunch Ledger → **Configuration** → **Cấu hình kênh Teams**, dùng nút chuyển nhanh **Cơm Chưa** hoặc **test_power_automate** để chọn channel đích. Hai profile dùng chung Team ID và Tenant ID như bảng ở đầu tài liệu. Chọn profile rồi bấm **Lưu cấu hình** để áp dụng. QR được giữ nguyên; SharePoint Site Address được chuyển theo channel:
+
+- **Cơm Chưa**: `https://vinova365.sharepoint.com/sites/VinovaHCM-CmCha`
+- **test_power_automate**: `https://vinova365.sharepoint.com/sites/VinovaHCM-test_power_automate`
+
+Cả hai profile dùng Folder Path `/Shared Documents`.
+
+Ở lần cấu hình đầu, điền hai trường SharePoint:
+
+- **SharePoint Site Address**: URL site, ví dụ `https://vinova365.sharepoint.com/sites/VinovaHCM-test_power_automate`. Không dùng URL thư mục `Shared Documents/Forms/AllItems.aspx`.
+- **SharePoint Folder Path**: đường dẫn trong thư viện, ví dụ `/Shared Documents`.
+
+Lưu cấu hình. App sẽ gửi hai giá trị này vào HTTP trigger; Flow dùng dynamic content ở cả **Create file** và **Get file properties**.
 
 Set environment variable trên Convex Dashboard:
 
@@ -248,6 +296,9 @@ curl -X POST "YOUR_WEBHOOK_URL" \
     "channelName": "test_power_automate",
     "tenantId": "a132a7f5-19fb-48f8-9ed0-5554d0f7652e",
     "qrImageUrl": "https://your-cdn.example/qr.jpg",
+    "sharePointSiteAddress": "https://vinova365.sharepoint.com/sites/VinovaHCM-test_power_automate",
+    "sharePointFolderPath": "/Shared Documents",
+    "screenshotBase64": "<thay bằng base64 PNG hợp lệ>",
     "debts": [
       {
         "name": "Julia Pham (Vinova)",
@@ -272,6 +323,9 @@ curl -X POST "YOUR_WEBHOOK_URL" \
     "channelName": "test_power_automate",
     "tenantId": "a132a7f5-19fb-48f8-9ed0-5554d0f7652e",
     "qrImageUrl": "https://your-cdn.example/qr.jpg",
+    "sharePointSiteAddress": "https://vinova365.sharepoint.com/sites/VinovaHCM-test_power_automate",
+    "sharePointFolderPath": "/Shared Documents",
+    "screenshotBase64": "<base64 PNG được tạo từ preview>",
     "debts": [
     {
       "name": "Julia Pham (Vinova)",
@@ -290,6 +344,8 @@ curl -X POST "YOUR_WEBHOOK_URL" \
 - `channelName` là tùy chọn, dùng để hiển thị/đối chiếu; không dùng để route message
 - `tenantId` được lấy từ phần **Cấu hình kênh Teams** trong app
 - `qrImageUrl` được lấy từ phần **Cấu hình kênh Teams** trong app; để trống nếu không dùng QR
+- `sharePointSiteAddress` và `sharePointFolderPath` được lấy từ phần **Cấu hình kênh Teams**; Flow dùng chúng để chọn nơi lưu ảnh
+- `screenshotBase64` là raw Base64 PNG (không có tiền tố `data:image/png;base64,`), tạo từ toàn bộ thành viên đang nợ; Power Automate lưu ảnh vào SharePoint của Team và card có nút mở file
 - Chỉ gửi người có `direction = owed` (đang nợ tiền)
 - Chỉ gửi người đã có `teams_email`
 - `amount` tính bằng đồng (120000 = 120.000đ)

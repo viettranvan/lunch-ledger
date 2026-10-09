@@ -62,7 +62,11 @@ describe("editor-only mutations", () => {
       () => t.mutation(api.features.teams.mutations.save, {
         team_id: "team", channel_id: "channel", tenant_id: "tenant",
       }),
-      () => t.action(api.integrations.teams.actions.sendDebtReminder, {}),
+      () => t.action(api.integrations.teams.actions.sendDebtReminder, {
+        screenshotBase64:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/gX8AAAAASUVORK5CYII=",
+        screenshotSnapshot: [],
+      }),
     ];
 
     for (const attempt of attempts) {

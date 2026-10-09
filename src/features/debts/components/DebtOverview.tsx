@@ -5,6 +5,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import Modal from "../../../shared/components/Modal";
 import ConfirmDialog from "../../../shared/components/ConfirmDialog";
 import { toast } from "../../../shared/lib/toast";
+import { createTeamsDebtScreenshotBase64 } from "../lib/teamsDebtScreenshot";
 
 function formatDebtDetails(details: number[]) {
   return details
@@ -50,13 +51,29 @@ export default function DebtOverview() {
   };
 
   const handleConfirmSendToTeams = async () => {
-    setIsTeamsPreviewOpen(false);
     setSendingTeams(true);
     try {
-      const result = await sendDebtReminder();
+      const screenshotSnapshot = receivables.map((debt) => ({
+        name: debt.name,
+        amount: debt.totalDebt,
+        details: formatDebtDetails(debt.details),
+      }));
+      const screenshotBase64 = await createTeamsDebtScreenshotBase64(
+        screenshotSnapshot.map((debt) => ({
+          name: debt.name,
+          details: debt.details,
+          total: `${debt.amount.toLocaleString("vi-VN")}đ`,
+        })),
+      );
+      setIsTeamsPreviewOpen(false);
+      const result = await sendDebtReminder({ screenshotBase64, screenshotSnapshot });
       if (!result.sent) {
         if (result.reason === "no_debts") {
           toast.info("Không có khoản phải thu cần nhắc.");
+        } else if (result.reason === "accepted") {
+          toast.warning(
+            `Power Automate đã nhận yêu cầu gửi cho ${result.count} người nhưng chưa xác nhận Flow hoàn tất. Kiểm tra Run history trước khi gửi lại để tránh gửi trùng.`,
+          );
         } else if (result.reason === "no_emails") {
           toast.warning(
             "Không gửi được — chưa có Teams email nào. Thêm email ở mục Thành viên.",
@@ -69,7 +86,7 @@ export default function DebtOverview() {
         ? ` (Bỏ qua: ${result.missingEmail.join(", ")})`
         : "";
       toast.success(
-        `Đã gửi nhắc nợ cho ${result.count} người vào Teams.${skippedMembers}`,
+        `Đã gửi nhắc nợ kèm ảnh đối chiếu cho ${result.count} người vào Teams.${skippedMembers}`,
       );
     } catch (error) {
       toast.error(
@@ -437,6 +454,10 @@ export default function DebtOverview() {
             </p>
           )}
 
+          <p className="teams-preview-image-note">
+            Ảnh đối chiếu gồm tất cả thành viên đang nợ, kể cả người thiếu email; tin nhắn sẽ có nút mở ảnh trong thư mục của Team.
+          </p>
+
           <div className="custom-modal-actions">
             <button
               type="button"
@@ -451,7 +472,7 @@ export default function DebtOverview() {
               onClick={handleConfirmSendToTeams}
               disabled={sendingTeams || sendableDebts.length === 0}
             >
-              Gửi ngay
+              {sendingTeams ? "Đang tạo ảnh và gửi…" : "Gửi ngay"}
             </button>
           </div>
         </Modal>

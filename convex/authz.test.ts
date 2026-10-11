@@ -63,9 +63,7 @@ describe("editor-only mutations", () => {
         team_id: "team", channel_id: "channel", tenant_id: "tenant",
       }),
       () => t.action(api.integrations.teams.actions.sendDebtReminder, {
-        screenshotBase64:
-          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/gX8AAAAASUVORK5CYII=",
-        screenshotSnapshot: [],
+        previewSnapshot: [],
       }),
     ];
 

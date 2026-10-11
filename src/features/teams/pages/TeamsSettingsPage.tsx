@@ -25,8 +25,6 @@ export default function TeamsSettingsPage() {
       channelName: storedConfig.channel_name ?? "",
       tenantId: storedConfig.tenant_id ?? "",
       qrImageUrl: storedConfig.qr_image_url ?? "",
-      sharePointSiteAddress: storedConfig.sharepoint_site_address ?? "",
-      sharePointFolderPath: storedConfig.sharepoint_folder_path ?? "",
     });
   }, [storedConfig]);
 
@@ -39,8 +37,6 @@ export default function TeamsSettingsPage() {
       channelName: config.channelName.trim(),
       tenantId: config.tenantId.trim(),
       qrImageUrl: config.qrImageUrl.trim(),
-      sharePointSiteAddress: config.sharePointSiteAddress.trim(),
-      sharePointFolderPath: config.sharePointFolderPath.trim(),
     };
 
     setIsSaving(true);
@@ -51,8 +47,6 @@ export default function TeamsSettingsPage() {
         channel_name: nextConfig.channelName || undefined,
         tenant_id: nextConfig.tenantId,
         qr_image_url: nextConfig.qrImageUrl || undefined,
-        sharepoint_site_address: nextConfig.sharePointSiteAddress,
-        sharepoint_folder_path: nextConfig.sharePointFolderPath,
       });
       setConfig(nextConfig);
       toast.success("Đã lưu cấu hình kênh Teams.");
@@ -99,8 +93,6 @@ export default function TeamsSettingsPage() {
                       channelId: profile.channelId,
                       channelName: profile.channelName,
                       tenantId: profile.tenantId,
-                      sharePointSiteAddress: profile.sharePointSiteAddress,
-                      sharePointFolderPath: profile.sharePointFolderPath,
                     }))
                   }
                 >
@@ -108,7 +100,7 @@ export default function TeamsSettingsPage() {
                 </button>
               ))}
             </div>
-            <small>Chọn kênh rồi bấm “Lưu cấu hình” để áp dụng. QR được giữ nguyên; SharePoint đổi theo kênh.</small>
+            <small>Chọn kênh rồi bấm “Lưu cấu hình” để áp dụng. QR được giữ nguyên.</small>
           </div>
 
           <label>
@@ -193,44 +185,6 @@ export default function TeamsSettingsPage() {
             <small>
               URL ảnh QR sẽ được gửi động sang Power Automate để hiển thị trong Adaptive Card.
             </small>
-          </label>
-
-          <label>
-            <span className="teams-field-label">
-              SharePoint Site Address <span className="required-mark" aria-hidden="true">*</span>
-            </span>
-            <input
-              type="url"
-              className="input-field"
-              value={config.sharePointSiteAddress}
-              onChange={(event) =>
-                setConfig((current) => ({ ...current, sharePointSiteAddress: event.target.value }))
-              }
-              placeholder="https://tenant.sharepoint.com/sites/site-name"
-              spellCheck={false}
-              autoComplete="url"
-              required
-            />
-            <small>URL site SharePoint chứa thư viện lưu ảnh tiền cơm.</small>
-          </label>
-
-          <label>
-            <span className="teams-field-label">
-              SharePoint Folder Path <span className="required-mark" aria-hidden="true">*</span>
-            </span>
-            <input
-              type="text"
-              className="input-field"
-              value={config.sharePointFolderPath}
-              onChange={(event) =>
-                setConfig((current) => ({ ...current, sharePointFolderPath: event.target.value }))
-              }
-              placeholder="/Shared Documents"
-              spellCheck={false}
-              autoComplete="off"
-              required
-            />
-            <small>Đường dẫn thư mục trong thư viện, ví dụ /Shared Documents.</small>
           </label>
 
           <div className="teams-settings-actions">

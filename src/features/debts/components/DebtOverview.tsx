@@ -5,7 +5,6 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import Modal from "../../../shared/components/Modal";
 import ConfirmDialog from "../../../shared/components/ConfirmDialog";
 import { toast } from "../../../shared/lib/toast";
-import { createTeamsDebtScreenshotBase64 } from "../lib/teamsDebtScreenshot";
 
 function formatDebtDetails(details: number[]) {
   return details
@@ -53,20 +52,13 @@ export default function DebtOverview() {
   const handleConfirmSendToTeams = async () => {
     setSendingTeams(true);
     try {
-      const screenshotSnapshot = receivables.map((debt) => ({
+      const previewSnapshot = receivables.map((debt) => ({
         name: debt.name,
         amount: debt.totalDebt,
         details: formatDebtDetails(debt.details),
       }));
-      const screenshotBase64 = await createTeamsDebtScreenshotBase64(
-        screenshotSnapshot.map((debt) => ({
-          name: debt.name,
-          details: debt.details,
-          total: `${debt.amount.toLocaleString("vi-VN")}đ`,
-        })),
-      );
       setIsTeamsPreviewOpen(false);
-      const result = await sendDebtReminder({ screenshotBase64, screenshotSnapshot });
+      const result = await sendDebtReminder({ previewSnapshot });
       if (!result.sent) {
         if (result.reason === "no_debts") {
           toast.info("Không có khoản phải thu cần nhắc.");
@@ -86,7 +78,7 @@ export default function DebtOverview() {
         ? ` (Bỏ qua: ${result.missingEmail.join(", ")})`
         : "";
       toast.success(
-        `Đã gửi nhắc nợ kèm ảnh đối chiếu cho ${result.count} người vào Teams.${skippedMembers}`,
+        `Đã gửi nhắc tiền cơm cho ${result.count} người vào Teams.${skippedMembers}`,
       );
     } catch (error) {
       toast.error(

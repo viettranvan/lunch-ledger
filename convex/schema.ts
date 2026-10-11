@@ -48,6 +48,7 @@ export default defineSchema({
     channel_name: v.optional(v.string()),
     tenant_id: v.optional(v.string()),
     qr_image_url: v.optional(v.string()),
+    // Keep legacy fields accepted until saving Teams settings clears existing documents.
     sharepoint_site_address: v.optional(v.string()),
     sharepoint_folder_path: v.optional(v.string()),
     updated_at: v.number(),

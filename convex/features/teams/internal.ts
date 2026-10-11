@@ -9,6 +9,13 @@ export const get = internalQuery({
         q.eq("integration", "teams").eq("key", "default"),
       )
       .first();
-    return current;
+    if (!current) return null;
+    return {
+      team_id: current.team_id,
+      channel_id: current.channel_id,
+      channel_name: current.channel_name,
+      tenant_id: current.tenant_id,
+      qr_image_url: current.qr_image_url,
+    };
   },
 });

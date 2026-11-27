@@ -28,6 +28,7 @@ Build one **line** per person per receipt item: `{ message_id, member_id, receip
 - **Counting**: "+1", "+ 1", "+" and a bare dish all mean one portion; "x2" / "+2" mean two; "cho Kane" / "đặt giùm Lani" assigns to that member; a later "hủy" / "thôi" from the same author cancels their earlier order.
 - **Ledger rule**: across all lines, each item's assigned quantity equals its `quantity` exactly. Identical dish names split across rows (e.g. "Bún Bò Nạm" ×3 and ×1) are separate `item_index`es; fill each one. With two receipts from the same restaurant, any assignment that fills every row is acceptable.
 - **Confidence**: `"high"` when name and dish match plainly; `"low"` for any guess, with a `note` saying why (≤300 chars).
+- **Orderer's portion**: the post author places the group order and usually skips writing their own dish. When exactly one portion of the day is left over, assign it to the post author (`confidence: "high"`, note "Phần duy nhất còn thừa: <name> đặt nhưng không ghi trên Teams."). With two or more leftovers, leave them all unassigned.
 - **Unmatched**: chatter ("sao dị anh Tí"), orders you cannot tie to a member or item, and leftover portions go to `unmatched: [{ message_id?, author, text, reason }]`. Leave a portion unassigned rather than invent an owner; the editor fills it on `/drafts`.
 
 Done when every order reply is either a line or an unmatched entry, and every receipt item is fully assigned or its gap is explained in `unmatched`.

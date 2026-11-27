@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import ConfirmDialog from "../../shared/components/ConfirmDialog";
 import { InvoiceDatePicker } from "../../shared/components/DatePickers";
 import { toast } from "../../shared/lib/toast";
 
@@ -16,6 +18,9 @@ export default function DraftsPage() {
   const pendingDates = useQuery(api.features.drafts.review.pendingDates, {});
   const setLines = useMutation(api.features.drafts.review.setLines);
   const approve = useMutation(api.features.drafts.review.approve);
+  const remove = useMutation(api.features.drafts.review.remove);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const draft = data?.draft;
   const lines = draft?.lines ?? [];
@@ -39,6 +44,19 @@ export default function DraftsPage() {
       toast.success(`Đã tạo ${ids.length} hóa đơn cho ngày ${displayDate(date)}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Không duyệt được bản nháp.");
+    }
+  }
+
+  async function runRemove() {
+    setIsDeleting(true);
+    try {
+      await remove({ date });
+      toast.success(`Đã xóa bản nháp ngày ${displayDate(date)}.`);
+      setIsConfirmingDelete(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không xóa được bản nháp.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -116,19 +134,28 @@ export default function DraftsPage() {
                       </li>
                     ))}
                   </ul>
-                  {receipt.shares.length > 0 && (
-                    <dl className="grab-charges">
-                      {receipt.shares.map((share) => (
-                        <div key={share.member_id}>
-                          <dt>{memberName.get(share.member_id)} <span className="text-muted">({currency.format(share.item_price)} giá món)</span></dt>
-                          <dd>{share.amount === undefined ? "—" : currency.format(share.amount)}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  )}
                 </li>
               ))}
             </ul>
+            {data.invoices.length > 0 && (
+              <>
+                <h3>Hóa đơn sẽ tạo</h3>
+                {data.invoices.map((invoice) => (
+                  <dl key={invoice.store_name} className="grab-charges">
+                    <div>
+                      <dt><strong>{invoice.store_name}</strong></dt>
+                      <dd><strong>{invoice.paid_amount === undefined ? "chưa đọc được tổng" : currency.format(invoice.paid_amount)}</strong></dd>
+                    </div>
+                    {invoice.orders.map((order) => (
+                      <div key={order.member_id}>
+                        <dt>{memberName.get(order.member_id)} <span className="text-muted">({currency.format(order.item_price)} giá món)</span></dt>
+                        <dd>{order.amount === undefined ? "—" : currency.format(order.amount)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ))}
+              </>
+            )}
             {draft.unmatched.length > 0 && (
               <>
                 <h3>Tin nhắn chưa khớp</h3>
@@ -144,11 +171,24 @@ export default function DraftsPage() {
                 <button type="button" className="submit-btn small-btn" disabled={!canApprove} onClick={() => void runApprove()}>
                   Duyệt và tạo hóa đơn
                 </button>
+                <button type="button" className="receipt-secondary draft-delete" onClick={() => setIsConfirmingDelete(true)}>
+                  Xóa bản nháp
+                </button>
               </div>
             )}
           </>
         )}
       </section>
+      {isConfirmingDelete && (
+        <ConfirmDialog
+          title="Xóa bản nháp?"
+          message={`Xóa bản nháp ngày ${displayDate(date)}. Biên nhận và tin nhắn Teams vẫn giữ nguyên, bạn có thể chạy lại skill lunch-draft để soạn lại.`}
+          confirmLabel="Xóa bản nháp"
+          isLoading={isDeleting}
+          onCancel={() => setIsConfirmingDelete(false)}
+          onConfirm={runRemove}
+        />
+      )}
     </div>
   );
 }

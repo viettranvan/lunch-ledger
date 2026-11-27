@@ -330,3 +330,62 @@ curl -X POST "YOUR_WEBHOOK_URL" \
 
 - [Send a message in Teams - Power Automate](https://learn.microsoft.com/en-us/power-automate/teams/send-a-message-in-teams)
 - [Mention users in Teams messages](https://learn.microsoft.com/en-us/power-automate/teams/send-a-message-in-teams#mention-a-user-in-any-message)
+
+## Nhập lịch sử Cơm Chưa vào Lunch Ledger
+
+Dùng flow **Lunch Ledger - Đọc đơn Teams theo tuần** đã có. Flow gửi một snapshot cho mỗi bài gốc sau khi đọc reply. Các bản ghi hiển thị tại `/teams` cho tài khoản editor.
+
+1. Deploy schema và functions lên Convex deployment của app. Trong **Settings → Environment Variables**, đặt `TEAMS_HISTORY_CHANNEL_ID` bằng ID kênh Cơm Chưa và `TEAMS_HISTORY_WEBHOOK_SECRET` bằng một chuỗi ngẫu nhiên dùng riêng cho flow này.
+2. Ngay sau trigger, thêm **Compose** với input `@{utcNow()}`.
+3. Trong **Apply to each**, thêm action **HTTP** sau **List replies of a channel message**. Chọn `POST` và URI `https://<convex-deployment>.convex.site/integrations/teams/history`. Đặt header `Content-Type: application/json` và `Authorization: Bearer <TEAMS_HISTORY_WEBHOOK_SECRET>`. Bật **Secure Inputs** cho action HTTP.
+4. Trong **Body**, dán biểu thức nội suy bên dưới để gửi JSON. Thay `<Cơm Chưa channel ID>` bằng đúng ID kênh. Nếu action đã được đổi tên, dùng đúng tên nội bộ trong expression.
+
+   ```text
+   @{string(setProperty(
+     setProperty(
+       setProperty(
+         setProperty(json('{}'), 'channelId', '<Cơm Chưa channel ID>'),
+         'observedAt', outputs('Compose')
+       ),
+       'post', items('Apply_to_each')
+     ),
+     'replies', body('List_replies_of_a_channel_message')
+   ))}
+   ```
+
+5. Chạy flow và mở **Đơn Teams** trong app. Lần chạy lại cập nhật cùng bài theo ID kênh và ID bài để tránh trùng. Nếu nhận 50 reply hoặc Teams trả link trang kế tiếp, UI hiện dấu `+` sau số reply để báo có thể còn dữ liệu.
+
+### Chạy flow bằng nút Đồng bộ Teams
+
+1. Đổi trigger của flow đọc lịch sử thành **When an HTTP request is received**. Chọn chế độ dùng URL có chữ ký để Convex gọi từ server. Lưu URL đầy đủ, gồm chữ ký, vào `TEAMS_HISTORY_TRIGGER_URL` trên cùng Convex deployment. Convex giữ URL này ở server. Giữ action **Compose** và action **HTTP** gửi snapshot về Convex như trên.
+2. Đặt schema cho request body.
+
+   ```json
+   {
+     "type": "object",
+     "properties": {
+       "from": { "type": "string" },
+       "to": { "type": "string" }
+     },
+     "required": ["from", "to"]
+   }
+   ```
+
+3. Trong **Filter array**, giữ điều kiện chỉ lấy bài gốc do người dùng đăng và dùng khoảng ngày gửi từ app. Ở chế độ nâng cao, dùng expression sau.
+
+   ```text
+   @and(
+     greaterOrEquals(
+       int(convertTimeZone(item()?['createdDateTime'], 'UTC', 'SE Asia Standard Time', 'yyyyMMdd')),
+       int(replace(triggerBody()?['from'], '-', ''))
+     ),
+     lessOrEquals(
+       int(convertTimeZone(item()?['createdDateTime'], 'UTC', 'SE Asia Standard Time', 'yyyyMMdd')),
+       int(replace(triggerBody()?['to'], '-', ''))
+     ),
+     not(empty(item()?['from']?['user']?['id'])),
+     empty(item()?['deletedDateTime'])
+   )
+   ```
+
+4. Bấm **Đồng bộ Teams** trong app. Power Automate tiếp nhận yêu cầu và xử lý nền. Danh sách cập nhật khi webhook Convex nhận từng bài. Nếu flow báo đã nhận nhưng danh sách không đổi, kiểm tra **Run history**, đặc biệt là action HTTP trong vòng lặp.

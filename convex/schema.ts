@@ -1,6 +1,9 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
+import { threadSnapshot } from "./features/teams/threadSnapshot";
+import { beFoodReceipt } from "./features/befood/receipt";
+import { draftLine, unmatchedMessage } from "./features/drafts/draft";
 
 const invoiceStatus = v.union(
   v.literal("completed"),
@@ -82,4 +85,30 @@ export default defineSchema({
     .index("by_user_paid", ["user_id", "is_paid"])
     .index("by_member_paid", ["member_id", "is_paid"])
     .index("by_paid", ["is_paid"]),
+  teams_order_threads: defineTable(threadSnapshot.fields)
+    .index("by_channel_post", ["channelId", "post.id"])
+    .index("by_post_date", ["postDate"]),
+  befood_receipts: defineTable({ ...beFoodReceipt.fields, synced_at: v.number() })
+    .index("by_order_id", ["order_id"])
+    .index("by_order_on", ["order_on"]),
+  grab_receipts: defineTable({
+    message_id: v.string(),
+    from: v.string(),
+    subject: v.string(),
+    order_on: v.string(),
+    restaurant: v.optional(v.string()),
+    total_vnd: v.optional(v.number()),
+    body_text: v.string(),
+    synced_at: v.number(),
+  })
+    .index("by_message", ["message_id"])
+    .index("by_order_on", ["order_on"]),
+  lunch_drafts: defineTable({
+    date: v.string(),
+    lines: v.array(draftLine),
+    unmatched: v.array(unmatchedMessage),
+    status: v.union(v.literal("pending"), v.literal("approved")),
+    submitted_at: v.number(),
+    invoice_ids: v.optional(v.array(v.id("invoices"))),
+  }).index("by_date", ["date"]),
 });

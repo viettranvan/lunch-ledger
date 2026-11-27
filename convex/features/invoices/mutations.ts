@@ -1,8 +1,85 @@
 import { v } from "convex/values";
-import { internalMutation, mutation } from "../../_generated/server";
+import { internalMutation, mutation, type MutationCtx } from "../../_generated/server";
+import type { Id } from "../../_generated/dataModel";
 import { requireEditor } from "../../authz";
 import { allocateProportionally } from "../orders/allocation";
 import { getSortTime, syncInvoiceStatus } from "./helpers";
+
+type NewInvoice = {
+  store_name: string;
+  paid_amount: number;
+  invoice_type?: "receivable" | "payable";
+  date: string;
+  orders: { member_id: Id<"members">; item_price: number }[];
+};
+
+/** Validates and inserts an invoice with its orderers; shared by the form and approved lunch drafts. */
+export async function insertInvoice(ctx: MutationCtx, args: NewInvoice) {
+  const storeName = args.store_name.trim();
+  if (!storeName) throw new Error("Vui lòng nhập tên quán hoặc nội dung hóa đơn.");
+  if (!Number.isSafeInteger(args.paid_amount) || args.paid_amount <= 0) {
+    throw new Error("Tổng hóa đơn phải lớn hơn 0 và được tính bằng đồng.");
+  }
+  if (args.orders.length === 0) {
+    throw new Error("Hóa đơn cần có ít nhất một thành viên và phần ăn.");
+  }
+
+  const invoiceType = args.invoice_type ?? "receivable";
+  if (invoiceType === "payable" && args.orders.length !== 1) {
+    throw new Error("Hóa đơn phải trả cần chọn đúng một người bạn nợ.");
+  }
+
+  const userIds = new Set<string>();
+  for (const order of args.orders) {
+    if (userIds.has(order.member_id)) {
+      throw new Error("Một thành viên không thể được thêm nhiều lần vào cùng hóa đơn.");
+    }
+    userIds.add(order.member_id);
+
+    if (!Number.isFinite(order.item_price) || order.item_price <= 0) {
+      throw new Error("Giá món của từng thành viên phải lớn hơn 0.");
+    }
+
+    const user = await ctx.db.get(order.member_id);
+    if (!user || !user.is_active) {
+      throw new Error("Danh sách có thành viên không còn hoạt động. Hãy tải lại trang.");
+    }
+  }
+
+  const allocations =
+    invoiceType === "payable"
+      ? [{ amount: args.paid_amount, percentage: 100 }]
+      : allocateProportionally(
+          args.paid_amount,
+          args.orders.map((order) => order.item_price),
+        );
+  const now = Date.now();
+  const invoiceId = await ctx.db.insert("invoices", {
+    store_name: storeName,
+    paid_amount: args.paid_amount,
+    invoice_type: invoiceType,
+    updated_at: now,
+    date: args.date,
+    sort_time: getSortTime(args.date, now),
+    total_orderers: args.orders.length,
+    paid_orderers: 0,
+    status: "unpaid",
+  });
+
+  for (const [index, order] of args.orders.entries()) {
+    await ctx.db.insert("orderers", {
+      member_id: order.member_id,
+      invoice_id: invoiceId,
+      actual_price: allocations[index].amount,
+      item_price: order.item_price,
+      is_paid: false,
+      percentage: allocations[index].percentage,
+      updated_at: now,
+    });
+  }
+
+  return invoiceId;
+}
 
 export const create = mutation({
   args: {
@@ -21,70 +98,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireEditor(ctx);
-    const storeName = args.store_name.trim();
-    if (!storeName) throw new Error("Vui lòng nhập tên quán hoặc nội dung hóa đơn.");
-    if (!Number.isSafeInteger(args.paid_amount) || args.paid_amount <= 0) {
-      throw new Error("Tổng hóa đơn phải lớn hơn 0 và được tính bằng đồng.");
-    }
-    if (args.orders.length === 0) {
-      throw new Error("Hóa đơn cần có ít nhất một thành viên và phần ăn.");
-    }
-
-    const invoiceType = args.invoice_type ?? "receivable";
-    if (invoiceType === "payable" && args.orders.length !== 1) {
-      throw new Error("Hóa đơn phải trả cần chọn đúng một người bạn nợ.");
-    }
-
-    const userIds = new Set<string>();
-    for (const order of args.orders) {
-      if (userIds.has(order.member_id)) {
-        throw new Error("Một thành viên không thể được thêm nhiều lần vào cùng hóa đơn.");
-      }
-      userIds.add(order.member_id);
-
-      if (!Number.isFinite(order.item_price) || order.item_price <= 0) {
-        throw new Error("Giá món của từng thành viên phải lớn hơn 0.");
-      }
-
-      const user = await ctx.db.get(order.member_id);
-      if (!user || !user.is_active) {
-        throw new Error("Danh sách có thành viên không còn hoạt động. Hãy tải lại trang.");
-      }
-    }
-
-    const allocations =
-      invoiceType === "payable"
-        ? [{ amount: args.paid_amount, percentage: 100 }]
-        : allocateProportionally(
-            args.paid_amount,
-            args.orders.map((order) => order.item_price),
-          );
-    const now = Date.now();
-    const invoiceId = await ctx.db.insert("invoices", {
-      store_name: storeName,
-      paid_amount: args.paid_amount,
-      invoice_type: invoiceType,
-      updated_at: now,
-      date: args.date,
-      sort_time: getSortTime(args.date, now),
-      total_orderers: args.orders.length,
-      paid_orderers: 0,
-      status: "unpaid",
-    });
-
-    for (const [index, order] of args.orders.entries()) {
-      await ctx.db.insert("orderers", {
-        member_id: order.member_id,
-        invoice_id: invoiceId,
-        actual_price: allocations[index].amount,
-        item_price: order.item_price,
-        is_paid: false,
-        percentage: allocations[index].percentage,
-        updated_at: now,
-      });
-    }
-
-    return invoiceId;
+    return insertInvoice(ctx, args);
   },
 });
 

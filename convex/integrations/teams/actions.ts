@@ -1,9 +1,10 @@
 "use node";
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action } from "../../_generated/server";
 import { api, internal } from "../../_generated/api";
 import type { DebtPayloadItem } from "../../features/debts/helpers";
+import { assertWorkWeek } from "../../features/grab/week";
 
 type SendDebtReminderResult =
   | { sent: false; reason: "no_debts" }
@@ -45,6 +46,37 @@ function getPublicAppUrl(): string | undefined {
     return undefined;
   }
 }
+
+export const syncOrderHistory = action({
+  args: { from: v.string(), to: v.string() },
+  handler: async (ctx, dates) => {
+    if (!(await ctx.runQuery(api.auth.isEditorQuery, {}))) {
+      throw new ConvexError("Bạn cần đăng nhập bằng tài khoản editor để đồng bộ Teams.");
+    }
+    assertWorkWeek(dates.from, dates.to);
+
+    const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+    const webhookUrl = env?.TEAMS_HISTORY_TRIGGER_URL?.trim();
+    if (!webhookUrl || !env?.TEAMS_HISTORY_CHANNEL_ID?.trim() || !env?.TEAMS_HISTORY_WEBHOOK_SECRET?.trim()) {
+      throw new ConvexError("Chưa cấu hình kết nối Power Automate để đồng bộ lịch sử Teams.");
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dates),
+        redirect: "error",
+      });
+    } catch {
+      throw new ConvexError("Không kết nối được với Power Automate.");
+    }
+    if (!response.ok) {
+      throw new ConvexError(`Power Automate từ chối yêu cầu đồng bộ (HTTP ${response.status}).`);
+    }
+  },
+});
 
 export const sendDebtReminder = action({
   args: {

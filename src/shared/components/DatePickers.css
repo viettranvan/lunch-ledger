@@ -1,0 +1,269 @@
+.ledger-date-surface {
+  z-index: 1500;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  color: #f8fafc;
+  background: #17182c;
+  border: 1px solid #45415e;
+  border-radius: 14px;
+  box-shadow: 0 16px 44px rgb(0 0 0 / 42%);
+}
+
+.ledger-date-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(3 5 16 / 70%);
+}
+
+.ledger-range-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-range-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.ledger-range-popover {
+  width: 44rem;
+}
+
+.ledger-range-popover .ledger-range-month {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ledger-range-popover .ledger-date-cell {
+  min-width: 0;
+  min-height: 2.125rem;
+}
+
+.ledger-date-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-inline-end: 1px solid #38364d;
+}
+
+.ledger-date-presets button {
+  min-height: 44px;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.ledger-range-months {
+  display: flex;
+}
+
+.ledger-range-month,
+.ledger-single-date {
+  padding: 0.75rem;
+}
+
+.ledger-single-date {
+  width: 21rem;
+}
+
+.ledger-single-date .ledger-date-cell {
+  min-width: 0;
+}
+
+.ledger-range-month + .ledger-range-month {
+  border-inline-start: 1px solid #38364d;
+}
+
+.ledger-date-header {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr 2.5rem;
+  align-items: center;
+  text-align: center;
+  font-weight: 650;
+  margin-bottom: 0.4rem;
+}
+
+.ledger-date-header h2 {
+  margin: 0;
+  font: inherit;
+}
+
+.ledger-date-nav {
+  display: grid;
+  place-items: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.25rem;
+}
+
+.ledger-date-nav[data-hovered] {
+  background: #34314c;
+}
+
+.ledger-date-surface table {
+  width: 100%;
+  table-layout: fixed;
+  border-spacing: 0 3px;
+}
+
+.ledger-date-surface td {
+  padding: 0;
+}
+
+.ledger-date-surface th {
+  color: #b6bad0;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.ledger-date-cell {
+  display: grid;
+  place-items: center;
+  min-width: 2.45rem;
+  min-height: 2.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.ledger-date-cell[data-outside-month] {
+  color: #8386a2;
+  cursor: default;
+}
+
+.ledger-date-cell[data-today] {
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.ledger-date-cell[data-hovered] {
+  border-radius: 8px;
+  background: #34314c;
+}
+
+.ledger-date-cell[data-selected]:not([data-outside-month]) {
+  background: #393053;
+  color: #f5edff;
+}
+
+.ledger-date-cell[data-selection-start]:not([data-outside-month]),
+.ledger-date-cell[data-selection-end]:not([data-outside-month]),
+.ledger-single-date .ledger-date-cell[data-selected]:not([data-outside-month]) {
+  background: #ad82ff;
+  color: #161025;
+  font-weight: 700;
+}
+
+.ledger-date-cell[data-selection-start] {
+  border-radius: 99px 0 0 99px;
+}
+
+.ledger-date-cell[data-selection-end] {
+  border-radius: 0 99px 99px 0;
+}
+
+.ledger-date-cell[data-selection-start][data-selection-end],
+.ledger-single-date .ledger-date-cell[data-selected] {
+  border-radius: 99px;
+}
+
+.ledger-date-cell[data-focus-visible],
+.ledger-date-nav[data-focus-visible],
+.ledger-date-segments [data-focused] {
+  outline: 2px solid #d0b4ff;
+  outline-offset: -2px;
+}
+
+.ledger-range-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-top: 1px solid #38364d;
+}
+
+.ledger-range-fields,
+.ledger-date-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ledger-range-fields label {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: #b6bad0;
+  font-size: 0.78rem;
+}
+
+.ledger-range-fields .ledger-date-segments {
+  min-height: 44px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #45415e;
+  border-radius: 8px;
+}
+
+.ledger-date-segments,
+.invoice-field .ledger-date-input {
+  display: flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.invoice-field .ledger-date-input {
+  justify-content: space-between;
+  padding-block: 0.2rem;
+}
+
+.ledger-date-segments [data-type]:not([data-type="literal"]) {
+  padding: 0.12rem;
+  border-radius: 3px;
+}
+
+.ledger-date-actions button {
+  min-height: 44px;
+  margin: 0;
+}
+
+.ledger-range-footer [role="alert"] {
+  flex-basis: 100%;
+  margin: 0;
+  color: #ffb3c4;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 899px) {
+  .ledger-range-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ledger-date-presets {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0.75rem;
+    border-inline-end: 0;
+    border-bottom: 1px solid #38364d;
+  }
+
+  .ledger-range-month {
+    width: 100%;
+  }
+
+  .ledger-date-cell {
+    min-width: 0;
+    min-height: 44px;
+  }
+}

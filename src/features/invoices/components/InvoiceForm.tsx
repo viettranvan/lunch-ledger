@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "re
 import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
 import { Link } from "react-router-dom";
+import { InvoiceDatePicker } from "../../../shared/components/DatePickers";
 import { toast } from "../../../shared/lib/toast";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
@@ -474,16 +475,7 @@ export default function InvoiceForm({
           ) : null}
         </div>
 
-        <label className="invoice-field">
-          <span>Ngày hóa đơn</span>
-          <input
-            type="date"
-            className="input-field"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            required
-          />
-        </label>
+        <InvoiceDatePicker value={date} onChange={setDate} />
         </div>
 
         <div className="invoice-composer-columns">

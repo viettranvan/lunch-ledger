@@ -7,7 +7,10 @@ import "../App.css";
 import AppLayout from "./components/AppLayout";
 import DashboardPage from "./pages/DashboardPage";
 import UsersPage from "../features/users/pages/UsersPage";
+import TeamsOrdersPage from "../features/teams/pages/TeamsOrdersPage";
 import TeamsSettingsPage from "../features/teams/pages/TeamsSettingsPage";
+import ReceiptsPage from "../features/receipts/ReceiptsPage";
+import DraftsPage from "../features/drafts/DraftsPage";
 import SignInPage from "../features/auth/SignInPage";
 
 function EditorRoute({ children }: { children: ReactNode }) {
@@ -27,7 +30,12 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/users" element={<EditorRoute><UsersPage /></EditorRoute>} />
+          <Route path="/teams" element={<EditorRoute><TeamsOrdersPage /></EditorRoute>} />
           <Route path="/settings/teams" element={<EditorRoute><TeamsSettingsPage /></EditorRoute>} />
+          <Route path="/receipts" element={<EditorRoute><ReceiptsPage /></EditorRoute>} />
+          <Route path="/drafts" element={<EditorRoute><DraftsPage /></EditorRoute>} />
+          <Route path="/grab" element={<Navigate to="/receipts" replace />} />
+          <Route path="/befood" element={<Navigate to="/receipts?source=befood" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

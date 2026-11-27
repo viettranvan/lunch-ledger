@@ -7,6 +7,9 @@ import { api } from "../../../convex/_generated/api";
 const navigationItems = [
   { label: "Dashboard", to: "/", icon: "◫", section: "overview" },
   { label: "Thành viên", to: "/users", icon: "♙", section: "users" },
+  { label: "Hóa đơn", to: "/receipts", icon: "▤", section: "receipts" },
+  { label: "Đơn Teams", to: "/teams", icon: "≡", section: "teamsOrders" },
+  { label: "Bản nháp", to: "/drafts", icon: "✎", section: "drafts" },
   { label: "Configuration", to: "/settings/teams", icon: "⚙", section: "teams" },
 ] as const;
 
@@ -21,9 +24,21 @@ const pageMetaBySection: Record<Section, { title: string; description: string }>
     title: "Quản lý thành viên",
     description: "Theo dõi thành viên và thông tin liên hệ trong workspace.",
   },
+  teamsOrders: {
+    title: "Đơn đặt cơm trên Teams",
+    description: "Xem bài đăng và phản hồi đã nhập từ Cơm Chưa.",
+  },
   teams: {
     title: "Cấu hình kênh Teams",
     description: "Chọn channel nhận thông báo nhắc nợ từ Power Automate.",
+  },
+  drafts: {
+    title: "Bản nháp hóa đơn",
+    description: "Duyệt phân bổ món do AI ghép từ Teams và biên nhận trước khi tạo hóa đơn.",
+  },
+  receipts: {
+    title: "Hóa đơn",
+    description: "Đồng bộ và xem biên nhận đặt món từ Grab và beFood.",
   },
 };
 
@@ -31,8 +46,13 @@ function getActiveSection(pathname: string): Section {
   if (pathname === "/users" || pathname.startsWith("/users/")) {
     return "users";
   }
+  if (pathname === "/teams") return "teamsOrders";
+  if (pathname === "/drafts") return "drafts";
   if (pathname === "/settings/teams") {
     return "teams";
+  }
+  if (pathname === "/receipts" || pathname === "/receipts/") {
+    return "receipts";
   }
   return "overview";
 }

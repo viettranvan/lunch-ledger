@@ -71,3 +71,15 @@ export default defineConfig([
   },
 ])
 ```
+
+
+## Đồng bộ beFood
+
+Dùng dấu trang (bookmarklet), chạy được trên Chrome, Edge, Firefox và Safari mà không cần cài tiện ích.
+
+1. Đăng nhập Lunch Ledger bằng tài khoản editor, mở **Hóa đơn → beFood** (`/receipts?source=befood`) và kéo nút **Lunch Ledger · beFood** lên thanh dấu trang. Mỗi domain Lunch Ledger (localhost, bản deploy) cần một dấu trang riêng.
+2. Mở [food.be.com.vn](https://food.be.com.vn/orders) và đăng nhập nếu beFood yêu cầu.
+3. Bấm dấu trang khi đang ở tab beFood. Lunch Ledger mở trong cửa sổ mới, đọc các đơn từ ngày của đơn mới nhất đã lưu đến hôm nay (lần đầu: 30 ngày gần nhất), đối chiếu tổng tiền rồi lưu. Lưu theo mã đơn nên đồng bộ lại không bị trùng. Muốn lấy khoảng khác, chọn ngày trong cửa sổ đó rồi bấm **Đồng bộ beFood**. Nếu trình duyệt chặn cửa sổ bật lên, cho phép `food.be.com.vn` mở cửa sổ rồi bấm lại.
+
+Token và cookie beFood không rời khỏi tab beFood. Dấu trang chỉ trả JSON của danh sách đơn và chi tiết đơn cho đúng domain Lunch Ledger đã tạo nó. Giữ tab beFood mở đến khi đồng bộ xong.
+
